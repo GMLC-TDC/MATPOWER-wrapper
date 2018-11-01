@@ -1,0 +1,41 @@
+{
+    "name": "matpower",
+    "log_level": 2,
+    "observer": false,
+    "rollback": false,
+    "only_update_on_change": false,
+    "only_transmit_on_change": false,
+    "source_only": false,
+    "uninterruptible": true,
+    "coreType": "zmq",
+    "coreName": "",
+    "coreInit": "1",
+    "maxIterations": 1,
+    "period": 15.0,
+    "offset": 0.0,
+    "timeDelta": 15.0,
+    "outputDelay": 0,
+    "inputDelay": 0,
+    "publications": [
+        {
+            "key": "voltageB7",
+            "type": "complex",
+            "unit": "V",
+            "global": false
+        }
+    ],
+    "subscriptions": [
+        {
+            "key": "small4BusSystem_feeder_0/distLoad",
+            "type": "complex",
+            "unit": "VA",
+            "required": true
+        },
+        {
+            "key": "small4BusSystem_feeder_1/distLoad",
+            "type": "complex",
+            "unit": "VA",
+            "required": true
+        }
+    ]
+}
