@@ -95,11 +95,6 @@ mpc.BusFNCS = [
 	7
 ];
 %% Number of distribution feeders (GridLAB-D instances)
-%mpc.FeederNumFNCS = 2
-%mpc.FeederNameFNCS = [
-%	small4BusSystem_feeder_0  7
-%	small4BusSystem_feeder_1	7
-%];
 mpc.FeederNumFNCS = 1
 mpc.FeederNameFNCS = [
 	IEEE_123_feeder_0  7
