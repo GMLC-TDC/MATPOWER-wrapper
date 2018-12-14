@@ -59,14 +59,14 @@ SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:${CMAKE_INSTALL_PREFIX}/inc
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 add_executable( start_MATPOWER 
-				start_MATPOWER.cpp 
-				read_model_dim.cpp 
-				read_model_data.cpp 
-				read_load_profile.cpp 
-				matpowerintegrator.cpp 
-				matpowerGeneratorMetrics.cpp
-				matpowerLoadMetrics.cpp
-				jsoncpp.cpp
+				src/start_MATPOWER.cpp 
+				src/read_model_dim.cpp 
+				src/read_model_data.cpp 
+				src/read_load_profile.cpp 
+				src/matpowerintegrator.cpp 
+				src/matpowerGeneratorMetrics.cpp
+				src/matpowerLoadMetrics.cpp
+				src/jsoncpp.cpp
 )
 
 target_include_directories(start_MATPOWER PUBLIC ${Matlab_INCLUDE_DIRS})
