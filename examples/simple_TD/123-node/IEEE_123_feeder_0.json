@@ -1,0 +1,13 @@
+{
+    "number_of_cores": "1",
+    "publications": {
+        "network_node": {
+            "distribution_load": "distLoad"
+        }
+    },
+    "subscriptions": {
+        "network_node": {
+            "positive_sequence_voltage": "matpower/voltageB7"
+        }
+    }
+}
