@@ -63,7 +63,7 @@ if (data_file.is_open()) {
             sscanf(&curr_line[0], "%*s = [ %d %d %*s", ncrows, nccolumns);
          }
          // ================== READING NUMBER OF BUSES WHERE SUBSTATION ARE CONNECTED FOR HELICS COMMUNICATION =========================================              
-         if (strncmp(&curr_line[0], "mpc.BusFNCSNum =", 16) == 0) {
+         if (strncmp(&curr_line[0], "mpc.BusCoSimNum =", 17) == 0) {
             LDEBUG << "Reading HELICS BUS NUMBER ...................." ;
             sscanf(&curr_line[0], "%*s = %d %*s", nHELICSBus);
          }
@@ -73,7 +73,7 @@ if (data_file.is_open()) {
             sscanf(&curr_line[0], "%*s = %d %*s", noffGen);
          }
          // ================== READING NUMBER OF FEEDERS THAT ARE CONNECTED TO BUSES IN A TRANSMISSION NETWORK ===============================
-         if (strncmp(&curr_line[0], "mpc.FeederNumFNCS =", 19) == 0) {
+         if (strncmp(&curr_line[0], "mpc.FeederNumCoSim =", 20) == 0) {
            LDEBUG << "Reading HELICS FEEDER NUMBER ...................................";
            sscanf(&curr_line[0], "%*s = %d %*s", nHELICSFeeders);
          }

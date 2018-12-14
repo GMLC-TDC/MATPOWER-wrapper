@@ -85,18 +85,18 @@ mpc.governor = {
 
 
 %% ======================================================================
-%% FNCS communication interface
+%% HELICS communication interface
 %% This has been added to simplify the set-up process
 %% ======================================================================
 %% Number of buses where distribution networks are going to be connected to
-mpc.BusFNCSNum = 1;
+mpc.BusCoSimNum = 1;
 %% Buses where distribution networks are going to be connected to
-mpc.BusFNCS = [
+mpc.BusCoSim = [
 	7
 ];
 %% Number of distribution feeders (GridLAB-D instances)
-mpc.FeederNumFNCS = 1
-mpc.FeederNameFNCS = [
+mpc.FeederNumCoSim = 1
+mpc.FeederNameCoSim = [
 	IEEE_123_feeder_0  7
 ];
 %% ======================================================================

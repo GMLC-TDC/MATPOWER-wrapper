@@ -146,10 +146,10 @@ if (data_file.is_open()) {
         }
       }
       // ================== READING BUS NUMBERS FOR HELICS COMMUNICATION =========================================              
-      if (strncmp(&curr_line[0], "mpc.BusFNCS =", 13) == 0) {
+      if (strncmp(&curr_line[0], "mpc.BusCoSim =", 14) == 0) {
         LDEBUG << "Reading HELICS SUBSTATION BUSES ...................." ;
         read_BusHELICS = 1; }
-      if (read_BusHELICS == 1 & strncmp(&curr_line[0], "mpc.BusFNCS =", 13) != 0){
+      if (read_BusHELICS == 1 & strncmp(&curr_line[0], "mpc.BusCoSim =", 14) != 0){
         if (ind < nHELICSbuses){
           read_BusHELICS = 1;
           sscanf(&curr_line[0], "%d %*s", &BusHELICS[ind]);
@@ -161,10 +161,10 @@ if (data_file.is_open()) {
         }
       }
       // ================== READING FEEDER NAMES FOR HELICS COMMUNICATION - T&D level =========================================              
-      if (strncmp(&curr_line[0], "mpc.FeederNameFNCS =", 20) == 0) {
+      if (strncmp(&curr_line[0], "mpc.FeederNameCoSim =", 21) == 0) {
         LDEBUG << "Reading HELICS FEEDER NAMES ...................." ;
         read_FeederNameHELICS = 1; }
-      if (read_FeederNameHELICS == 1 & strncmp(&curr_line[0], "mpc.FeederNameFNCS =", 20) != 0){
+      if (read_FeederNameHELICS == 1 & strncmp(&curr_line[0], "mpc.FeederNameCoSim =", 21) != 0){
         if (ind < nHELICSfeeders){
           read_FeederNameHELICS = 1;
           char temp[50];
