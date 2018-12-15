@@ -1,8 +1,10 @@
 
 # Transmission System Solver for Co-Simulation #
 
+****************************************
 *Copyright (C) 2018, Battelle Memorial Institute*
-*Author: Laurentiu Dan Marinovici, Jacob Hansen, and Gayathri Krishnamoorthy*
+
+*Authors: Laurentiu Dan Marinovici, Jacob Hansen, and Gayathri Krishnamoorthy*
 ****************************************
 
 This repository contains the necessary code in order to simulate Transmission systems that can be used for Co-Simulation with HELICS. This work uses MATPOWER explained below.
@@ -21,6 +23,7 @@ The main 3 steps of running a MATPOWER simulation are:
 ## MATPOWER case files ##
 
 MATPOWER case files are MATLAB functions (``.m`` files) that specify a set of data matrices corresponding to each component of the studied power system, that is, buses, generators, lines/branches, etc. All these matrices are bundled in a MATLAB structure, referred to as a **M**AT**P**OWER **C**ase (MPC). For example, the 9-bus, 3-generator power system model is specified as:
+
 ```
 function mpc = case9
 % CASE9    Power flow data for 9 bus, 3 generator case.
@@ -104,6 +107,7 @@ To facilitate the integration of MATPOWER within the HELICS environment, and its
 </ol>
 
 The added MATLAB code line are shown below:
+
 ```
 %% ======================================================================
 %% HELICS communication interface
@@ -154,6 +158,7 @@ If MATPOWER is one of the simulators used as part of the HELICS environment, the
 In order to be able to integrate MATPOWER under Linux in HELICS, without the need of a MathWorks MATLAB full license, the free MATLAB Runtime (MCR) needs to be installed. All the MCR versions can be downloaded [here][linkMCR]. The installed MCR version needs to be the same as the MATLAB version under which the original MATPOWER code has been compiled in, and built into the deployable files *``libMATPOWER.h``* and *``libMATPOWER.so``* under *``/src``*. for this repository MCR R2018a (9.4) is required. MCR encourages you to add certain paths to the *``LD_LIBRARY_PATH``* on your system. However, as this can cause issues on some system this application does not require you to do so.
 
 To access the MATPOWER functions and pass data back and forth from MATPOWER (transmission, generation, wholesale market simulator) to GridLAB-D (distribution simulator) through HELICS, a C++ wrapper has been written, consisting of:
+  
   * *``src/start_MATPOWER.cpp``* - the main wrapper around the MATPOWER functions that establishes the communication between MATPOWER and HELICS, arranges data according to the type MATLAB requires it or HELICS needs it to make it available to other simulators;
   * *``src/matpowerintegrator.h``* and *``src/matpowerintegrator.cpp``* - define the functions that integrate MATPOWER within the HELICS environment;
   * *``src/read_input_data.h``* - includes all definitions of the functions that read and parse the input data, both the load profile that resides in a text file (created in MATLAB from an experimental set of data meant to model a standard daily load shape) and the MATPOWER model in order to construct the correct C++ counterparts for the matrices needed to solve the power flow;
@@ -165,10 +170,12 @@ To access the MATPOWER functions and pass data back and forth from MATPOWER (tra
 Lastly you will also need to have HELICS installed on your system. At the moment this repository is compatible with the HELICS 2.0 beta 1 release. Please follow the guides available [here][linkHELICS] to install HELICS.
 
 ### Step by step process to install ###
+
 * Ensure that HELICS is mapped to your path environment on your system
 * Ensure that MCR is installed on your system
 * Ensure you are in the root of this repository
 * Execute the following commands:
+
 ``` 
 mkdir build
 cd build
@@ -179,6 +186,7 @@ cmake ../ -DCMAKE_INSTALL_PREFIX=<install path> -DMatlab_ROOT_DIR=<MCR path> -DZ
 make
 make install  
 ```
+
 This will install the software in the specified *`<install path>`*.
 
 ## Running guide - Linux ##
@@ -190,6 +198,7 @@ To run MATPOWER simulator as part of the HELICS environment in Linux, use the gu
 ```
 
 Where:
+
 * *`<helics json>`* is the HELICS json configuration file.
 * *`<MATPOWER case file>`* is the MATPOWER case file.
 * *`<real power demand file>`* is the 5 minutes real load profile data per bus in the MATPOWER case file.
@@ -203,6 +212,7 @@ Where:
 * *`<generation metric file>`* is the file to store the generation metric data in.
 
 ## References ##
+
 [1] R. D. Zimmerman, C. E. Murillo-Sanchez, and R. J. Thomas, "*MATPOWER: Steady-State Operations, Planning and Analysis Tools for Power Systems Research and Education*," Power Systems, IEEE Transactions on, vol. 26, no. 1, pp. 12-19, Feb. 2011. Paper can be found [here][link2MATPOWERpaper].
 
 [2] R. D. Zimmerman, C. E. Murillo-Sanchez, "*MATPOWER: User's Manual*". Download the manual [here][link2MATPOWERman]
