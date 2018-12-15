@@ -30,7 +30,7 @@ mark_as_advanced(CLEAR Matlab_ROOT_DIR)
 
 find_library(MATPOWER_LIBRARY
     NAMES MATPOWER
-    PATHS ${PROJECT_SOURCE_DIR}
+    PATHS ${CMAKE_SOURCE_DIR}/src
 )
 
 mark_as_advanced(BOOST_INSTALL_PATH)
@@ -70,15 +70,13 @@ add_executable( start_MATPOWER
 )
 
 target_include_directories(start_MATPOWER PUBLIC ${Matlab_INCLUDE_DIRS})
-target_include_directories(start_MATPOWER PUBLIC ${CMAKE_SOURCE_DIR})
 
-target_link_libraries(start_MATPOWER jsoncpp)
 target_link_libraries(start_MATPOWER ${MATPOWER_LIBRARY})
 target_link_libraries(start_MATPOWER ${MATLAB_MCR_LIBRARY})
 target_link_libraries(start_MATPOWER ${ZeroMQ_LIBRARY})
 target_link_libraries(start_MATPOWER HELICS::helics-static)
 
 install(TARGETS start_MATPOWER DESTINATION bin)
-install(FILES libMATPOWER.h DESTINATION include)
-install(FILES libMATPOWER.so DESTINATION lib)
+install(FILES src/libMATPOWER.h DESTINATION include)
+install(FILES src/libMATPOWER.so DESTINATION lib)
 
