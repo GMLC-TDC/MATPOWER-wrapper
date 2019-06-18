@@ -221,4 +221,4 @@ Where:
 [link2MATPOWERMan]: http://www.pserc.cornell.edu/matpower/MATPOWER-manual.pdf "MATPOWER manual"
 [link2MATPOWERpaper]: http://www.pserc.cornell.edu/matpower/MATPOWER-paper.pdf "MATPOWER paper"
 [linkMCR]: https://www.mathworks.com/products/compiler/mcr.html
-[linkHELICS]: https://gmlc-tdc.github.io/HELICS-src/installation/linux.html 
+[linkHELICS]: https://helics.readthedocs.io/en/latest/installation/index.html
