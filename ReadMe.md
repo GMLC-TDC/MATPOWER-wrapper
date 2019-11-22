@@ -8,10 +8,14 @@
 ****************************************
 
 This repository contains the necessary code in order to simulate Transmission systems that can be used for Co-Simulation with HELICS. This work uses MATPOWER explained below.
- 
+
+
+**\[DEVELOPERS NOTE\} This repository is based on an older version of HELICS.  It is not currently under development, recent interactions between MATPOWER and HELICS would typically use the HELICS matlab interface and interact more directly rather than compiling a library for interacting with HELICS and matlab.  This code is made available as an example and for future reference if the effort is revived in the future. **
+
+
 ## MATPOWER ##
 
-MATPOWER is a package of MATLAB M-files for solving power flow and optimal power flow problems. To download the package in its latest version or previous ones follow this [link][link2MATPOWER]. The main documentation can be found [here][link2MATPOWERMan] [1], while a short description of its functionality is presented in this [paper][link2MATPOWERpaper] [2].
+MATPOWER is a package of MATLAB M-files for solving power flow and optimal power flow problems. To download the package in its latest version or previous ones follow this [link][link2MATPOWER]. The main documentation can be found [here][link2MATPOWERMan] \[1\], while a short description of its functionality is presented in this [paper][link2MATPOWERpaper] \[2\].
 
 The main 3 steps of running a MATPOWER simulation are:
 <ol>
@@ -158,7 +162,7 @@ If MATPOWER is one of the simulators used as part of the HELICS environment, the
 In order to be able to integrate MATPOWER under Linux in HELICS, without the need of a MathWorks MATLAB full license, the free MATLAB Runtime (MCR) needs to be installed. All the MCR versions can be downloaded [here][linkMCR]. The installed MCR version needs to be the same as the MATLAB version under which the original MATPOWER code has been compiled in, and built into the deployable files *``libMATPOWER.h``* and *``libMATPOWER.so``* under *``/src``*. for this repository MCR R2018a (9.4) is required. MCR encourages you to add certain paths to the *``LD_LIBRARY_PATH``* on your system. However, as this can cause issues on some system this application does not require you to do so.
 
 To access the MATPOWER functions and pass data back and forth from MATPOWER (transmission, generation, wholesale market simulator) to GridLAB-D (distribution simulator) through HELICS, a C++ wrapper has been written, consisting of:
-  
+
   * *``src/start_MATPOWER.cpp``* - the main wrapper around the MATPOWER functions that establishes the communication between MATPOWER and HELICS, arranges data according to the type MATLAB requires it or HELICS needs it to make it available to other simulators;
   * *``src/matpowerintegrator.h``* and *``src/matpowerintegrator.cpp``* - define the functions that integrate MATPOWER within the HELICS environment;
   * *``src/read_input_data.h``* - includes all definitions of the functions that read and parse the input data, both the load profile that resides in a text file (created in MATLAB from an experimental set of data meant to model a standard daily load shape) and the MATPOWER model in order to construct the correct C++ counterparts for the matrices needed to solve the power flow;
@@ -176,7 +180,7 @@ Lastly you will also need to have HELICS installed on your system. At the moment
 * Ensure you are in the root of this repository
 * Execute the following commands:
 
-``` 
+```
 mkdir build
 cd build
 # if you did not change the default ZMQ or Boost paths
@@ -213,12 +217,19 @@ Where:
 
 ## References ##
 
-[1] R. D. Zimmerman, C. E. Murillo-Sanchez, and R. J. Thomas, "*MATPOWER: Steady-State Operations, Planning and Analysis Tools for Power Systems Research and Education*," Power Systems, IEEE Transactions on, vol. 26, no. 1, pp. 12-19, Feb. 2011. Paper can be found [here][link2MATPOWERpaper].
+\[1\] R. D. Zimmerman, C. E. Murillo-Sanchez, and R. J. Thomas, "*MATPOWER: Steady-State Operations, Planning and Analysis Tools for Power Systems Research and Education*," Power Systems, IEEE Transactions on, vol. 26, no. 1, pp. 12-19, Feb. 2011. Paper can be found [here][link2MATPOWERpaper].
 
-[2] R. D. Zimmerman, C. E. Murillo-Sanchez, "*MATPOWER: User's Manual*". Download the manual [here][link2MATPOWERman]
+\[2\] R. D. Zimmerman, C. E. Murillo-Sanchez, "*MATPOWER: User's Manual*". Download the manual [here][link2MATPOWERman]
 
 [link2MATPOWER]: http://www.pserc.cornell.edu/matpower/ "MATPOWER site"
 [link2MATPOWERMan]: http://www.pserc.cornell.edu/matpower/MATPOWER-manual.pdf "MATPOWER manual"
 [link2MATPOWERpaper]: http://www.pserc.cornell.edu/matpower/MATPOWER-paper.pdf "MATPOWER paper"
 [linkMCR]: https://www.mathworks.com/products/compiler/mcr.html
 [linkHELICS]: https://helics.readthedocs.io/en/latest/installation/index.html
+
+
+## Release
+MATPOWER-wrapper code is distributed under the terms of the BSD-3 clause license. All new
+contributions must be made under this license. [LICENSE](LICENSE)
+
+SPDX-License-Identifier: BSD-3-Clause
