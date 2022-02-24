@@ -1,4 +1,4 @@
-# MATPOWER-MOST wrapper (Developed as a part of HELICS UC-4.1
+# MATPOWER-MOST wrapper (Developed as a part of HELICS UC-4.1)
 
 The Wrapper is currenty developed in Octave (Open-Source)
 
