@@ -2,11 +2,14 @@ function functions = wrapper_functions
   functions.read_config=@read_config;
   functions.write_config=@write_config;
   functions.prepare_helics_config=@prepare_helics_config;
+  functions.create_profiles=@create_profiles;
   functions.interpolate_profile_to_powerflow_interval=@interpolate_profile_to_powerflow_interval;
 end
   
 
-  %%%%%%%%%%%%%%%% Create HEICS Configuration %%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%% Create HELICS Configuration %%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function config_data = prepare_helics_config(config_file_name, config_data)
   
   config_data.helics_config.coreInit = "--federates=1";
@@ -60,25 +63,65 @@ function config_data = prepare_helics_config(config_file_name, config_data)
 
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%% Interpolate Input Profile  %%%%%%%%%%%%%%%%%%%%%%%%%%
-function required_profile = interpolate_profile_to_powerflow_interval(input_data, input_data_resolution, required_resolution, duration)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% Create Load Profiles from Input data %%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function profiles = create_profiles(input_file_name, profile_info, start_time, end_time, required_resolution, duration)
   
-  raw_data_duration = length(input_data)*input_data_resolution;
-  raw_data_intervals  = linspace(0, raw_data_duration, (raw_data_duration/input_data_resolution)+1)'(1:end-1);
-  required__intervals  = linspace(0, duration, (duration/required_resolution)+1)'(1:end-1);
-  
-  if raw_data_intervals(1) <= required__intervals(1) && raw_data_intervals(end) >= required__intervals(end)
-    interpolated_data = interp1 (raw_data_intervals, input_data, required__intervals, "spline");
-    required_profile = [required__intervals interpolated_data];
-    logger.warn('Interpolating input profile for simulation intervals');  
-  else
-    logger.warn('Simulation intervals is out of interpolation range for the input profile');  
-    required_profile = [raw_data_intervals input_data];
+  input_resolution = profile_info.resolution;
+  input_data_reference_time = strptime(profile_info.starting_time, '%Y-%m-%d %k:%M:%S');
+  #{ 
+    Calculating Start & End points to load only the profile data required for Simulation.
+    This will help reduce the memory by not having to store the data worth of a year.  
+  #}
+  start_data_point = (mktime (start_time) - mktime(input_data_reference_time)) / input_resolution;
+  end_data_point   = (mktime (end_time) - mktime(input_data_reference_time)) / input_resolution;
+  end_column   = max(profile_info.columns_bus_map.columns(end));
+  #{ 
+    Loadind data based on the simulation duration.  
+    Assumption:
+        The profiles are provided in csv.
+        The simulation duration is a subset of the duration of the data.  
+        If else, The user is expected to adjust the start/end dates or the profile. 
+  #}
+  data  = csvread(input_file_name, [start_data_point, 0, end_data_point, end_column]); 
+  input_data_resolution = profile_info.resolution;
+
+  for idx = 1: length(profile_info.columns_bus_map.bus)
+    data_idx = profile_info.columns_bus_map.columns(idx);
+    bus_idx  = profile_info.columns_bus_map.bus(idx);
+    logger.debug('Loading Load profiles for bus %s from input column', bus_idx, data_idx);
+    profiles(:,bus_idx) = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, duration);
+    
   end
   
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Read Json Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%% Interpolate Input Profile  %%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function required_profile = interpolate_profile_to_powerflow_interval(input_data, input_data_resolution, required_resolution, duration)
+  
+  raw_data_duration = length(input_data)*input_data_resolution;
+  raw_data_intervals  = linspace(0, raw_data_duration, (raw_data_duration/input_data_resolution)+1)'(1:end-1);
+  required_intervals  = linspace(0, duration, (duration/required_resolution)+1)'(1:end-1);
+  
+  if raw_data_intervals(1) <= required_intervals(1) && raw_data_intervals(end) >= required_intervals(end)
+    interpolated_data = interp1 (raw_data_intervals, input_data, required_intervals, "spline");
+##    required_profile = [required_intervals interpolated_data];
+    required_profile = interpolated_data;
+    logger.debug('Interpolating input profile for simulation intervals');  
+  else
+    logger.warn('Simulation intervals is out of interpolation range for the input profile');  
+##    required_profile = [raw_data_intervals input_data];
+    required_profile = input_data;
+  end
+  
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%% Read Json Configuration %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function val = read_config(file)
    fid = fopen(file); 
    raw = fread(fid,inf); 
@@ -86,12 +129,13 @@ function val = read_config(file)
    fclose(fid); 
    val = jsondecode(str);
 end
-
   
-%%%%%%%%%%%%%%%%%%%%%%%%%% Write Json Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%% Write Json Configuration %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function write_config(file, data)
        str = jsonencode (data, 'PrettyPrint', true);
        fid = fopen(file, 'w'); 
        fputs(fid, str);
        fclose(fid); 
-  end
+end

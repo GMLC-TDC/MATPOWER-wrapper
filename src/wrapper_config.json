@@ -1,7 +1,7 @@
 {
   "matpower_most_data":{
-    "datapath": "/home/monish/Projects/HELICS_Plus/matpower_wrapper/system_data/",
-	 "case_name": "8_system_case_config.json",
+    "datapath": "/home/monish/Projects/HELICS_Plus/MATPOWER-wrapper/system_data/",
+	 "case_name": "ERCOT_8_system.json",
     "load_profile": {
     	"filename": "2016_ERCOT_5min_Load_Data.csv",
     	"resolution": 300,

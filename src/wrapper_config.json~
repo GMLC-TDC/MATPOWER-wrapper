@@ -1,0 +1,50 @@
+{
+  "matpower_most_data":{
+    "datapath": "/home/monish/Projects/HELICS_Plus/MATPOWER-wrapper/system_data/",
+	 "case_name": "ERCOT_8_system.json",
+    "load_profile": {
+    	"filename": "2016_ERCOT_5min_Load_Data.csv",
+    	"resolution": 300,
+    	"starting_time": "2016-01-01 00:00:00",
+    	"columns_bus_map": {
+    		"columns": [2, 3, 4, 5, 6, 7, 8, 9], 
+    		"bus": [1 ,2, 3, 4, 5, 6, 7, 8]
+    		}
+    }
+ 	},
+  "results_files": "/home/monish/Projects/HELICS_Plus/matpower_wrapper/results/", 
+  "start_time": "2016-02-17 00:00:00", 
+  "end_time": "2016-02-18 00:00:00", 
+  "include_contingencies": false, 
+  "include_renewable_uncertainty": false,
+  "include_load_uncertainty": false,
+  "include_reserve_requirements": false,
+  "include_line_limits": true,
+  "include_physics_powerflow": true,
+  "include_real_time_market": true, 
+  "include_day_ahead_market": false, 
+  "cosimulation_bus": [1, 7, 8],
+  "physics_powerflow":{
+    "type": "AC",
+    "interval": 30
+  }, 
+  "real_time_market":{
+    "type": "AC",
+    "interval": 300, 
+    "transactive": true
+  }, 
+  "day_ahead_market":{
+    "type": "AC",
+    "interval": 86400, 
+    "transactive": true
+  },
+  "helics_config": {
+    "coreType": "zmq",
+    "name": "TransmissionSim",
+    "period": 1,
+    "timeDelta": 0.0,
+    "logfile": "output.log",
+    "log_level": 4,
+    "uninterruptible": true
+  }
+}
