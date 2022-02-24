@@ -6,7 +6,7 @@ Requirements:
 
 OCTAVE: 5.4 or higher 
 
-HELICS 2.7 - with Octave Bindings(Currently working on HELICS 2 and will be updated to HELICS 3.0 Soon)
+HELICS 2.7 - with Octave Bindings (Currently working on HELICS 2 and will be updated to HELICS 3.0 Soon)
 
 MATPOWER-MOST (7.1 or Later) https://matpower.org/
 
