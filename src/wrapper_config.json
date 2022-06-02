@@ -1,20 +1,20 @@
 {
   "matpower_most_data":{
-    "datapath": "/home/monish/Projects/HELICS_Plus/MATPOWER-wrapper/system_data/",
-	 "case_name": "ERCOT_8_system.json",
-    "load_profile": {
-    	"filename": "2016_ERCOT_5min_Load_Data.csv",
+    "datapath": "../system_data/",
+	"case_name": "ERCOT_8_system.json",
+    "load_profile_info": {
+    	"filename": "2021_ERCOT_5min_Load_Data.csv",
     	"resolution": 300,
-    	"starting_time": "2016-01-01 00:00:00",
+    	"starting_time": "2021-01-01 00:00:00",
     	"columns_bus_map": {
     		"columns": [2, 3, 4, 5, 6, 7, 8, 9], 
     		"bus": [1 ,2, 3, 4, 5, 6, 7, 8]
     		}
     }
  	},
-  "results_files": "/home/monish/Projects/HELICS_Plus/matpower_wrapper/results/", 
-  "start_time": "2016-02-17 00:00:00", 
-  "end_time": "2016-02-18 00:00:00", 
+  "results_files": "../results/", 
+  "start_time": "2021-01-10 00:00:00", 
+  "end_time": "2021-01-11 00:00:00", 
   "include_contingencies": false, 
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
@@ -26,7 +26,7 @@
   "cosimulation_bus": [1, 7, 8],
   "physics_powerflow":{
     "type": "AC",
-    "interval": 30
+    "interval": 60
   }, 
   "real_time_market":{
     "type": "AC",
