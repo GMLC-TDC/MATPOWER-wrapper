@@ -71,7 +71,8 @@ function profiles = create_profiles(input_file_name, profile_info, start_time, e
     %}
     start_data_point = (start_time - input_data_reference_time)*3600*24/input_resolution;
     end_data_point   = (end_time - input_data_reference_time)*3600*24 /input_resolution;
-    end_column   = max(profile_info.columns_bus_map.columns(end));
+    start_column = min(profile_info.data_map.columns)-1;
+    end_column = max(profile_info.data_map.columns)-1;
     %{ 
     Loadind data based on the simulation duration.  
     Assumption:
@@ -79,16 +80,13 @@ function profiles = create_profiles(input_file_name, profile_info, start_time, e
         The simulation duration is a subset of the duration of the data.  
         If else, The user is expected to adjust the start/end dates or the profile. 
     %}
-    data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column-1]); 
-    input_data_resolution = profile_info.resolution;
-
-    for idx = 1: length(profile_info.columns_bus_map.bus)
-        data_idx = profile_info.columns_bus_map.columns(idx);
-        bus_idx  = profile_info.columns_bus_map.bus(idx);
-        logger.debug('Loading Load profiles for bus %s from input column', bus_idx, data_idx);
-        [profiles(:,bus_idx), profile_intervals] = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, duration);
+    data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column]);    
+    for idx = 1: length(profile_info.data_map.columns)
+        data_idx = profile_info.data_map.columns(idx);
+%         logger.debug('Loading Load profiles for bus %s from input column', bus_idx, data_idx);
+        [profiles(:,data_idx), profile_intervals] = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, duration);
     end
-    profiles = [profile_intervals profiles];
+    profiles(:,1) = profile_intervals;
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

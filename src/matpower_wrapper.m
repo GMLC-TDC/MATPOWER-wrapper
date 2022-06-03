@@ -1,7 +1,7 @@
 %  function matpower_wrapper()
     config_file = 'wrapper_config.json';
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%% Loading Packages %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% %%%%%%%%%%%%%%%%%%%%%%%%% Loading Packages %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     wrapper_startup;
     define_constants;
 %     pkg load json ;
@@ -13,7 +13,7 @@
     functions = wrapper_functions;
     mpc_manip = mpc_manipulation;
 
-%% %%%%%%%%%%%%%%%%%%%%% Reading Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% %%%%%%%%%%%%%%%%%%%%% Reading Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     config_data = functions.read_config(config_file);
     logger.info('Loading Simulation Configuration File %s',config_file);
 
@@ -30,10 +30,20 @@
     end
     logger.info('Transmission System: %s', config_data.matpower_most_data.case_name);
 
+    %% %%%%%%%%%%%%%%%%%%%%%%% Load Profiles %%%%%%%%%%%%%%%%%%%%%%%%%%
     if isfield(config_data.matpower_most_data,'load_profile_info')
         load_profile_file_name = strcat(config_data.matpower_most_data.datapath, config_data.matpower_most_data.load_profile_info.filename);     
         logger.info('Loading Load profiles for system from: %s', config_data.matpower_most_data.load_profile_info.filename);
-        case_profiles = functions.create_profiles(load_profile_file_name, config_data.matpower_most_data.load_profile_info, start_time, end_time, config_data.physics_powerflow.interval, config_data.Duration);
+        case_load_profiles = functions.create_profiles(load_profile_file_name, config_data.matpower_most_data.load_profile_info, start_time, end_time, config_data.physics_powerflow.interval, config_data.Duration);
+    else
+        logger.info('Not Loading any profiles');
+    end
+    
+    %% %%%%%%%%%%%%%%%%%%%%%%% VRE Profiles %%%%%%%%%%%%%%%%%%%%%%%%%%
+    if isfield(config_data.matpower_most_data,'wind_profile_info')
+        wind_profile_file_name = strcat(config_data.matpower_most_data.datapath, config_data.matpower_most_data.wind_profile_info.filename);     
+        logger.info('Loading Wind profiles for system from: %s', config_data.matpower_most_data.wind_profile_info.filename);
+        case_wind_profiles = functions.create_profiles(wind_profile_file_name, config_data.matpower_most_data.wind_profile_info, start_time, end_time, config_data.physics_powerflow.interval, config_data.Duration);
     else
         logger.info('Not Loading any profiles');
     end
@@ -58,22 +68,24 @@
     time_granted = 300;
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
     
-    mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', 'AC');
+    mpoptOPF = mpoption('verbose', 1, 'out.all', 0, 'model', 'AC');
     mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'model', 'AC');
+    
+    %% Increasing the branch 
     
 %     while time_granted <= config_data.Duration
     next_helics_time =  min([tnext_real_time_market]);
     time_granted = next_helics_time;
-
+    
     if time_granted >= tnext_real_time_market        
-        mpc = mpc_manip.update_loads(mpc, config_data.matpower_most_data.load_profile_info, case_profiles, time_granted);
+        mpc = mpc_manip.update_loads_from_profiles(mpc, config_data.matpower_most_data.load_profile_info, case_load_profiles, time_granted);
+        mpc = mpc_manip.update_VRE_from_profiles(mpc, config_data.matpower_most_data.wind_profile_info, case_wind_profiles, time_granted);
+
         results = rundcopf(mpc, mpoptOPF);
-        results.v
         tnext_real_time_market = tnext_real_time_market + config_data.physics_powerflow.interval;
     end
        
 %     end
 %  end
-
 
   
