@@ -148,7 +148,8 @@ classdef MATPOWERWrapper
        function obj = run_power_flow(obj, time, mpoptPF)       
 %            obj.mpc.bus(:,12) = 1.3* ones(length(obj.mpc.bus(:,12)),1);
 %            obj.mpc.bus(:,13) = 0.7* ones(length(obj.mpc.bus(:,13)),1);
-           solution = runpf(obj.mpc, mpoptPF);                 
+           solution = runpf(obj.mpc, mpoptPF);  
+           obj.mpc.gen(:,2) = solution.gen(:, 2);
            if isempty(obj.results.PF)
                obj.results.PF(1).VM = [time solution.bus(:, 8)'];
            else
@@ -158,6 +159,7 @@ classdef MATPOWERWrapper
        
        function obj = run_RT_market(obj, time, mpoptOPF)       
            solution = rundcopf(obj.mpc, mpoptOPF); 
+           obj.mpc.gen(:,2) = solution.gen(:, 2);
            if solution.success == 1
                if isempty(obj.results.RTM)
                    obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
