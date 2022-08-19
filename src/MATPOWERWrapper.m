@@ -14,7 +14,10 @@ classdef MATPOWERWrapper
    
    methods
        %% Intializing the Wrapper %% 
-       function obj = MATPOWERWrapper(config_file)
+       function obj = MATPOWERWrapper(config_file, isOctave)
+           if isOctave == 1
+             pkg load json ;
+           end
            obj.config_data = read_json(config_file);
            obj.start_time  = datenum(obj.config_data.start_time, 'yyyy-mm-dd HH:MM:SS');
            obj.end_time    = datenum(obj.config_data.end_time, 'yyyy-mm-dd HH:MM:SS');
@@ -54,7 +57,7 @@ classdef MATPOWERWrapper
            data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column]);    
            for idx = 1: length(profile_info.data_map.columns)
                data_idx = profile_info.data_map.columns(idx);
-    %                 logger.debug('Loading Load profiles for bus %s from input column', bus_idx, data_idx);
+               fprintf('Loading %s for bus %d from input column \n', output_fieldname, data_idx);
                [profiles(:,data_idx), profile_intervals] = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, obj.duration);
            end
            profiles(:,1) = profile_intervals;
@@ -196,9 +199,9 @@ function [required_profile, required_intervals] = interpolate_profile_to_powerfl
                 interpolated_data = interp1 (raw_data_intervals, input_data, required_intervals, "spline");
                 %%    required_profile = [required_intervals interpolated_data];
                 required_profile = interpolated_data;
-                logger.debug('Interpolating input profile for simulation intervals');  
+                %fprintf('Interpolating input profile for simulation intervals \n');  
             else
-                logger.warn('Simulation intervals is out of interpolation range for the input profile');  
+                %fprintf('Simulation intervals is out of interpolation range for the input profile');  
                 %%    required_profile = [raw_data_intervals input_data];
                 required_profile = input_data;
             end

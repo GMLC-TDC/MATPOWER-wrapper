@@ -2,8 +2,11 @@ clc
 clear all
 clear classes
 
+%% Check if MATLAB or OCTAVE
+isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
-Wrapper = MATPOWERWrapper('wrapper_config.json');
+wrapper_startup;
+Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 
 %% Read profile and save it within a strcuture called load
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
