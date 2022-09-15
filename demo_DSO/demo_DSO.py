@@ -91,6 +91,7 @@ if __name__ == "__main__":
     create_helics_configuration(wrapper_config['helics_config'], helics_config_filename)
 
     ##### Starting HELICS Broker #####
+    # h.helicsBrokerDisconnect(broker)
     broker = create_broker(2)
 
 
@@ -120,25 +121,35 @@ if __name__ == "__main__":
     status = h.helicsFederateEnterExecutingMode(fed)
     print('DSO: Federate {} Entering execution'.format(h.helicsFederateGetName(fed)))
 
-    tnext_physics_powerflow = wrapper_config['physics_powerflow']['interval']
-    tnext_real_time_market  = wrapper_config['real_time_market']['interval']
-    tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']
+    buffer = 1  ###### Buffer to sending out data before the Operational Cycle  ######
+    tnext_physics_powerflow = wrapper_config['physics_powerflow']['interval']-buffer
+    tnext_real_time_market  = wrapper_config['real_time_market']['interval']-buffer
+    tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']-buffer
 
 
     duration = 300
     time_granted = -1
     while time_granted <= duration:
+        
         next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
+        
         time_granted = h.helicsFederateRequestTime(fed, next_helics_time)
 
         print('DSO: Requested {}s and got Granted {}s'.format(next_helics_time, time_granted))
-        current_time = start_date +  + timedelta(seconds=time_granted)
+        current_time = start_date + timedelta(seconds=time_granted)
         print('DSO: Current Time is {}'.format(current_time))
 
 
+        ######## Power Flow ########
         if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow']:
-
-            data_idx = load_profiles.index[load_profiles.index == current_time]
+            print("hello")
+            
+            
+        ######## Power Flow ########
+        if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow']:
+            
+            profile_time = current_time + timedelta(seconds=buffer)
+            data_idx = load_profiles.index[load_profiles.index == profile_time]
             current_load_profiles = load_profiles.loc[data_idx]
             for cosim_bus in wrapper_config['cosimulation_bus']:
                 base_kW = case['bus'][cosim_bus-1][2]
@@ -166,4 +177,6 @@ if __name__ == "__main__":
 
             tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow']['interval']
 
-    h.helicsBrokerDisconnect(broker)
+    h.helicsFederateDisconnect(fed)
+    h.helicsBrokerWaitForDisconnect(broker,-1)
+    h.helicsCloseLibrary();

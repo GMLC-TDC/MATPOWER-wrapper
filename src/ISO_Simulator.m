@@ -13,25 +13,15 @@ Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
 
 if Wrapper.config_data.include_helics
-    helics; 
+
+    if isOctave
+       helics; 
+    else
+       import helics.*
+    end
+               
     Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSOSim'); 
-    fprintf('Wrapper: Helics version = %s\n', helicsGetVersion)
-    fed = helicsCreateCombinationFederateFromConfig('helics_config.json');
-    
-    pubkeys_count = helicsFederateGetPublicationCount(fed);
-    pub_keys = cell(pubkeys_count, 1);
-    for pub_idx = 1:pubkeys_count
-        pub_object = helicsFederateGetPublicationByIndex(fed, pub_idx-1);
-        pub_keys(pub_idx) = cellstr(helicsPublicationGetName(pub_object));
-    end
-    
-    subkeys_count = helicsFederateGetInputCount(fed);
-    sub_keys = cell(subkeys_count, 1);
-    for sub_idx = 1:subkeys_count
-        sub_object = helicsFederateGetInputByIndex(fed, sub_idx-1);
-        sub_keys(sub_idx) = cellstr(helicsSubscriptionGetTarget(sub_object));
-    end
-    helicsFederateEnterExecutingMode(fed);
+    Wrapper = Wrapper.start_helics_federate('helics_config.json');
 end
     
 tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
@@ -49,10 +39,10 @@ while time_granted <= 300
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
     
     if Wrapper.config_data.include_helics
-        time_granted  = helicsFederateRequestTime(fed, next_helics_time)
-        fprintf('Wrapper: Reqeuested  %d and Granted %d\n', next_helics_time, time_granted)
+        time_granted  = helicsFederateRequestTime(Wrapper.helics_data.fed, next_helics_time);
+        fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
     else
-        time_granted = next_helics_time
+        time_granted = next_helics_time;
     end
     
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
@@ -97,39 +87,17 @@ while time_granted <= 300
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             
-            % Get data from HELICS
-            time_request = time_granted+1;
-            while time_granted < time_request
-                time_granted  = helicsFederateRequestTime(fed, next_helics_time);
+            if Wrapper.config_data.include_helics  
+                Wrapper = Wrapper.update_loads_from_helics();
             end
-              
-            for bus_idx= 1 : length(Wrapper.config_data.cosimulation_bus)
-                cosim_bus = Wrapper.config_data.cosimulation_bus(bus_idx)
-                temp = strfind(sub_keys, strcat('.pcc.', mat2str(cosim_bus), '.pq'));
-                subkey_idx = find(~cellfun(@isempty,temp));
-                sub_object = helicsFederateGetSubscription(fed, sub_keys(subkey_idx));
-                demand = helicsInputGetComplex(sub_object);
-                Wrapper.mpc.bus(cosim_bus, 3) = real(demand);
-                Wrapper.mpc.bus(cosim_bus, 4) = imag(demand);
-                fprintf('Wrapper: Got Load %d+%d from CoSIM bus %d\n', real(demand), imag(demand), cosim_bus)
-            end
-            
             
             % Collect measurements from distribution networks
             Wrapper = Wrapper.run_power_flow(time_granted);  
-          
-            for bus_idx= 1 : length(Wrapper.config_data.cosimulation_bus)
-                cosim_bus = Wrapper.config_data.cosimulation_bus(bus_idx);
-                cosim_bus_voltage = Wrapper.mpc.bus(cosim_bus, 8) * Wrapper.mpc.bus(cosim_bus, 10);
-                cosim_bus_angle = Wrapper.mpc.bus(cosim_bus, 9)*pi/180;
-                voltage = pol2cart(cosim_bus_angle, cosim_bus_voltage);
-                
-                temp = strfind(pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.pnv')) ;
-                pubkey_idx = find(~cellfun(@isempty,temp));
-                pub_object = helicsFederateGetPublication(fed, pub_keys(pubkey_idx));
-                helicsPublicationPublishComplex(pub_object, complex(voltage(1), voltage(2)));
-            end
             
+            if Wrapper.config_data.include_helics  
+                Wrapper = Wrapper.send_voltages_to_helics();
+            end
+
             tnext_physics_powerflow = tnext_physics_powerflow + Wrapper.config_data.physics_powerflow.interval;
     end
     
@@ -139,5 +107,5 @@ while time_granted <= 300
 
 end
 
-helicsFederateDisconnect(fed);
-    
+helicsFederateDestroy(Wrapper.helics_data.fed)
+helics.helicsCloseLibrary()
