@@ -91,7 +91,8 @@ if __name__ == "__main__":
     create_helics_configuration(wrapper_config['helics_config'], helics_config_filename)
 
     ##### Starting HELICS Broker #####
-    create_broker(2)
+    broker = create_broker(2)
+
 
     ##### Registering DSO Federate #####
     fed = h.helicsCreateCombinationFederateFromConfig(helics_config_filename)
@@ -151,13 +152,18 @@ if __name__ == "__main__":
                 status = h.helicsPublicationPublishComplex(pub_object, current_load.real, current_load.imag)
                 print('DSO: Published {} demand for Bus {}'.format(current_load, cosim_bus))
 
-            time_granted = h.helicsFederateRequestTime(fed, time_granted+1)
+            time_request = time_granted+2
+            while time_granted < time_request:
+                time_granted = h.helicsFederateRequestTime(fed, time_request)
+
+            print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
 
             for cosim_bus in wrapper_config['cosimulation_bus']:
                 sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.pnv') in key ]
-                sub_object = h.helicsFederateGetSubscription(fed, sub_key)
-                voltage_real,  voltage_imag = h.helicsInputGetComplex(sub_object)
-                print('DSO: Received {} Voltage for Bus {}'.format(complex(voltage_real,  voltage_imag), cosim_bus))
+                sub_object = h.helicsFederateGetSubscription(fed, sub_key[0])
+                voltage = h.helicsInputGetComplex(sub_object)
+                print('DSO: Received {} Voltage for Bus {}'.format(voltage, cosim_bus))
 
-            tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow.interval'];
+            tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow']['interval']
 
+    h.helicsBrokerDisconnect(broker)

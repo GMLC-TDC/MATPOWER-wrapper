@@ -8,11 +8,9 @@ isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 wrapper_startup;
 Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 
-
 %% Read profile and save it within a strcuture called load
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
-
 
 if Wrapper.config_data.include_helics
     helics; 
@@ -52,6 +50,7 @@ while time_granted <= 300
     
     if Wrapper.config_data.include_helics
         time_granted  = helicsFederateRequestTime(fed, next_helics_time)
+        fprintf('Wrapper: Reqeuested  %d and Granted %d\n', next_helics_time, time_granted)
     else
         time_granted = next_helics_time
     end
@@ -94,19 +93,43 @@ while time_granted <= 300
             tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
     
-    if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_real_time_market)     
+    if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_physics_powerflow)     
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             
             % Get data from HELICS
-            
-            for cosim_bus= 1 : length(Wrapper.config_data.cosimulation_bus)
-                a = strfind(sub_keys(sub_idx), strcat('.pcc.', mat2str(cosim_bus), '.pq'))  
-                b = 1 
+            time_request = time_granted+1;
+            while time_granted < time_request
+                time_granted  = helicsFederateRequestTime(fed, next_helics_time);
+            end
+              
+            for bus_idx= 1 : length(Wrapper.config_data.cosimulation_bus)
+                cosim_bus = Wrapper.config_data.cosimulation_bus(bus_idx)
+                temp = strfind(sub_keys, strcat('.pcc.', mat2str(cosim_bus), '.pq'));
+                subkey_idx = find(~cellfun(@isempty,temp));
+                sub_object = helicsFederateGetSubscription(fed, sub_keys(subkey_idx));
+                demand = helicsInputGetComplex(sub_object);
+                Wrapper.mpc.bus(cosim_bus, 3) = real(demand);
+                Wrapper.mpc.bus(cosim_bus, 4) = imag(demand);
+                fprintf('Wrapper: Got Load %d+%d from CoSIM bus %d\n', real(demand), imag(demand), cosim_bus)
             end
             
+            
             % Collect measurements from distribution networks
-            Wrapper = Wrapper.run_power_flow(time_granted);    
+            Wrapper = Wrapper.run_power_flow(time_granted);  
+          
+            for bus_idx= 1 : length(Wrapper.config_data.cosimulation_bus)
+                cosim_bus = Wrapper.config_data.cosimulation_bus(bus_idx);
+                cosim_bus_voltage = Wrapper.mpc.bus(cosim_bus, 8) * Wrapper.mpc.bus(cosim_bus, 10);
+                cosim_bus_angle = Wrapper.mpc.bus(cosim_bus, 9)*pi/180;
+                voltage = pol2cart(cosim_bus_angle, cosim_bus_voltage);
+                
+                temp = strfind(pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.pnv')) ;
+                pubkey_idx = find(~cellfun(@isempty,temp));
+                pub_object = helicsFederateGetPublication(fed, pub_keys(pubkey_idx));
+                helicsPublicationPublishComplex(pub_object, complex(voltage(1), voltage(2)));
+            end
+            
             tnext_physics_powerflow = tnext_physics_powerflow + Wrapper.config_data.physics_powerflow.interval;
     end
     
@@ -116,4 +139,5 @@ while time_granted <= 300
 
 end
 
+helicsFederateDisconnect(fed);
     

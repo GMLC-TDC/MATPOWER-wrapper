@@ -24,7 +24,7 @@ classdef MATPOWERWrapper
            case_name = strcat(obj.config_data.matpower_most_data.datapath, obj.config_data.matpower_most_data.case_name);
            obj.MATPOWERModifier = MATPOWERModifier(case_name);
            obj.mpc = obj.MATPOWERModifier.MATPOWERModel;
-           obj.results(1).PF =  struct('VM',{});
+           obj.results(1).PF =  struct('VM',{}, 'VA', {});
            obj.results(1).RTM =  struct('PG',{} , 'PD', {}, 'LMP', {});
        end
        
@@ -40,7 +40,7 @@ classdef MATPOWERWrapper
 
            %{ 
            Calculating Start & End points to load only the profile data required for Simulation.
-           This will help reduce the memory by not having to store the data worth of a year.  
+           This will help reduce the memory by not having to store a year worth of data.  
            %}
            start_data_point = (obj.start_time - input_data_reference_time)*3600*24/input_resolution;
            end_data_point   = (obj.end_time - input_data_reference_time)*3600*24 /input_resolution;
@@ -189,7 +189,9 @@ classdef MATPOWERWrapper
            mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.nr.max_it', 20, 'pf.enforce_q_lims', 0, 'model', obj.config_data.physics_powerflow.type);
 
            solution = runpf(obj.mpc, mpoptPF);  
-           obj.mpc.gen(:,2) = solution.gen(:, 2);
+           obj.mpc.bus(:,8:9) = solution.bus(:, 8:9);
+           obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
+           
            if isempty(obj.results.PF)
                obj.results.PF(1).VM = [time solution.bus(:, 8)'];
            else
