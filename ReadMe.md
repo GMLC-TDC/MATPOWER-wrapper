@@ -48,21 +48,20 @@ In addition to the wrapper, a demoDSO code is also provided in this repo. The de
 
   1. Requires Octave to be installed and added to the path 
   2.  Build HELICS from source with Swig-based bindigns for Octave
-    ```
-    1.1. Navigate to your Installation Directory  (lets us assume it is /home/user/Software/; change this path as appropriate)
-    1.2. mkdir helics_install (make the installation directory for HELICS)
-    1.3. wget https://github.com/GMLC-TDC/HELICS/releases/download/v3.1.1/Helics-v3.1.1-source.tar.gz  (this link downloads the source code for Helics 3.1.1)
-    1.4. mkdir Helics_Source (Creating a directory for the source code that will be obtained from extracting the tar )
-    1.5. tar -xvf Helics-v3.1.1-source.tar.gz -C /home/user/Software/Helics_Source/
-    1.6. cd Helics_Source/ 
-    1.7. mkdir build
-    1.8. cd build/
-    1.9. export CFLAGS="-Wno-error"  (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
-    1.10. export CXXFLAGS="-Wno-error" (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
-    1.11. cmake -DHELICS_BUILD_OCTAVE_INTERFACE=ON -DCMAKE_INSTALL_PREFIX=/home/helics-user/Software/helics_install ..
-    1.12. make -j8
-    1.13. make install
-    ```
+      2.1. Navigate to your Installation Directory  (lets us assume it is /home/user/Software/; change this path as appropriate)
+      2.2. mkdir helics_install (make the installation directory for HELICS)
+      2.3. wget https://github.com/GMLC-TDC/HELICS/releases/download/v3.1.1/Helics-v3.1.1-source.tar.gz  (this link downloads the source code for Helics 3.1.1)
+      2.4. mkdir Helics_Source (Creating a directory for the source code that will be obtained from extracting the tar )
+      2.5. tar -xvf Helics-v3.1.1-source.tar.gz -C /home/user/Software/Helics_Source/
+      2.6. cd Helics_Source/ 
+      2.7. mkdir build
+      2.8. cd build/
+      2.9. export CFLAGS="-Wno-error"  (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
+      2.10. export CXXFLAGS="-Wno-error" (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
+      2.11. cmake -DHELICS_BUILD_OCTAVE_INTERFACE=ON -DCMAKE_INSTALL_PREFIX=/home/helics-user/Software/helics_install ..
+      2.12. make -j8
+      2.13. make install
+   
     This will install the HELICS in the specified *`</home/helics-user/Software/helics_install>`*.
   3. Install pyhelics: pip install helics (This will install the python bindings required by the demoDSO)
   
