@@ -9,7 +9,6 @@ classdef MATPOWERWrapper
       mpc
       profiles = struct();
       results =  struct('PF', 1,'RTM', {},'DAM', {});
-
    end
    
    methods
@@ -25,12 +24,12 @@ classdef MATPOWERWrapper
            case_name = strcat(obj.config_data.matpower_most_data.datapath, obj.config_data.matpower_most_data.case_name);
            obj.MATPOWERModifier = MATPOWERModifier(case_name);
            obj.mpc = obj.MATPOWERModifier.MATPOWERModel;
-           
            obj.results(1).PF =  struct('VM',{});
            obj.results(1).RTM =  struct('PG',{} , 'PD', {}, 'LMP', {});
        end
        
        function obj = read_profiles(obj, input_fieldname, output_fieldname)
+         
            
            profile_info = obj.config_data.matpower_most_data.(input_fieldname);
            data_path = obj.config_data.matpower_most_data.datapath; 
@@ -50,6 +49,7 @@ classdef MATPOWERWrapper
            %{ 
             Loadind data based on the simulation duration.  
             Assumption:
+            
                 The profiles are provided in csv.
                 The simulation duration is a subset of the duration of the data.  
                 If else, The user is expected to adjust the start/end dates or the profile. 
@@ -57,14 +57,16 @@ classdef MATPOWERWrapper
            data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column]);    
            for idx = 1: length(profile_info.data_map.columns)
                data_idx = profile_info.data_map.columns(idx);
-               fprintf('Loading %s for bus %d from input column \n', output_fieldname, data_idx);
+               %fprintf('Loading %s for bus/gen %d from input column \n', output_fieldname, data_idx);
                [profiles(:,data_idx), profile_intervals] = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, obj.duration);
            end
            profiles(:,1) = profile_intervals;
            obj.profiles.(output_fieldname) = profiles;
        end 
        
-       function obj = prepare_helics_config(obj, config_file_name)
+       
+       function obj = prepare_helics_config(obj, config_file_name, SubSim)
+
            obj.config_data.helics_config.coreInit = "--federates=1";
            obj.config_data.helics_config.coreName = "Transmission Federate";
            obj.config_data.helics_config.publications = [];
@@ -74,37 +76,37 @@ classdef MATPOWERWrapper
                 cosim_bus = obj.config_data.cosimulation_bus(i);
                 %%%%%%%%%%%%%%%%% Creating Pubs & Subs for physics_powerflow %%%%%%%%%%%%%%%%%
                 if obj.config_data.include_physics_powerflow
-                    publication.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_voltage' );
+                    publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.pnv');
                     publication.type =   "complex";
                     publication.global =   true;
                     obj.config_data.helics_config.publications = [obj.config_data.helics_config.publications publication];
 
-                    subscription.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_load' );
+                    subscription.key =   strcat (SubSim, '.pcc.', mat2str(cosim_bus), '.pq');
                     subscription.type =   "complex";
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
                 %%%%%%%%%%%%%%%%% Creating Pubs & Subs for real time market %%%%%%%%%%%%%%%%%%    
                 if obj.config_data.include_real_time_market
-                    publication.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_RT_PQ_cleared' );
-                    publication.type =   "vector";
+                    publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.rt_energy.cleared');
+                    publication.type =   "JSON";
                     publication.global =   true;
                     obj.config_data.helics_config.publications = [obj.config_data.helics_config.publications publication];  
 
-                    subscription.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_RT_PQ_bids' );
-                    subscription.type =   "vector";
+                    subscription.key =   strcat (SubSim, '.pcc.', mat2str(cosim_bus), '.rt_energy.bid');
+                    subscription.type =   "JSON";
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
                 %%%%%%%%%%%%%%%%% Creating Pubs & Subs for day ahead market %%%%%%%%%%%%%%%%%% 
                 if obj.config_data.include_day_ahead_market
-                    publication.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_DA_PQ_cleared' );
-                    publication.type =   "complex";
+                    publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.da_energy.cleared');
+                    publication.type =   "JSON";
                     publication.global =   true;
                     obj.config_data.helics_config.publications = [obj.config_data.helics_config.publications publication];
 
-                    subscription.key =   strcat (obj.config_data.helics_config.name, '/bus', mat2str(cosim_bus), '_DA_PQ_bids' );
-                    subscription.type =   "complex";
+                    subscription.key =   strcat (SubSim, '.pcc', mat2str(cosim_bus), '.da_energy.bid');
+                    subscription.type =   "JSON";
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
@@ -113,6 +115,7 @@ classdef MATPOWERWrapper
        end
        
        function obj = update_loads_from_profiles(obj, time, profile_info_fieldname, profile_fieldname)
+         
             
            profile = obj.profiles.(profile_fieldname);
            profile_row = find(time==profile(:,1));
@@ -128,6 +131,7 @@ classdef MATPOWERWrapper
        end
        
        function obj = update_VRE_from_profiles(obj, time, profile_info_fieldname, profile_fieldname)
+         
             
            profile = obj.profiles.(profile_fieldname);
            profile_row = find(time == profile(:,1));
@@ -180,6 +184,10 @@ classdef MATPOWERWrapper
        function obj = run_power_flow(obj, time, mpoptPF)       
 %            obj.mpc.bus(:,12) = 1.3* ones(length(obj.mpc.bus(:,12)),1);
 %            obj.mpc.bus(:,13) = 0.7* ones(length(obj.mpc.bus(:,13)),1);
+
+
+           mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.nr.max_it', 20, 'pf.enforce_q_lims', 0, 'model', obj.config_data.physics_powerflow.type);
+
            solution = runpf(obj.mpc, mpoptPF);  
            obj.mpc.gen(:,2) = solution.gen(:, 2);
            if isempty(obj.results.PF)
@@ -189,7 +197,9 @@ classdef MATPOWERWrapper
            end       
        end
        
-       function obj = run_RT_market(obj, time, mpoptOPF)       
+       function obj = run_RT_market(obj, time, mpoptOPF)  
+         
+           mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
            solution = rundcopf(obj.mpc, mpoptOPF); 
            obj.mpc.gen(:,2) = solution.gen(:, 2);
            if solution.success == 1
@@ -204,6 +214,7 @@ classdef MATPOWERWrapper
                end  
            else
                fprintf('Wrapper: OPF failed to converged at %d, retrying', time/3600);
+               %% Increasing the branch flow %%
                obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)*1.2;
                solution = rundcopf(obj.mpc, mpoptOPF); 
                obj.mpc.gen(:,2) = solution.gen(:, 2);
@@ -216,8 +227,8 @@ classdef MATPOWERWrapper
        end
        
    end
-       
-end
+
+end   
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%% Interpolate Input Profile  %%%%%%%%%%%%%%%%%%%%%%%

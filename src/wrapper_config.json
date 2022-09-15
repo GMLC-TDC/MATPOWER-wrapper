@@ -1,6 +1,6 @@
 {
   "matpower_most_data":{
-    "datapath": "../system_data/",
+    "datapath": "../system_data/ERCOT/",
 	"case_name": "ERCOT_8_system.json",
     "load_profile_info": {
     	"filename": "2016_ERCOT_8_system_5min_load_data.csv",
@@ -30,20 +30,21 @@
   "include_reserve_requirements": false,
   "include_line_limits": true,
   "include_physics_powerflow": true,
-  "include_real_time_market": true, 
+  "include_real_time_market": false, 
   "include_day_ahead_market": false, 
-  "cosimulation_bus": [2,3 ],
+  "include_helics": true, 
+  "cosimulation_bus": [2, 3],
   "physics_powerflow":{
-    "type": "AC",
+    "type": "DC",
     "interval": 60
   }, 
   "real_time_market":{
-    "type": "AC",
+    "type": "DC",
     "interval": 300, 
     "transactive": true
   }, 
   "day_ahead_market":{
-    "type": "AC",
+    "type": "DC",
     "interval": 86400, 
     "transactive": true
   },
@@ -53,7 +54,7 @@
     "period": 1,
     "timeDelta": 0.0,
     "logfile": "output.log",
-    "log_level": 4,
+    "log_level": "warning",
     "uninterruptible": true
   }
 }

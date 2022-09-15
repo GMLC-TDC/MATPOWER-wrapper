@@ -8,36 +8,55 @@ isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 wrapper_startup;
 Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 
+
 %% Read profile and save it within a strcuture called load
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
-Wrapper = Wrapper.prepare_helics_config('helics_config.json');   
+
+
+if Wrapper.config_data.include_helics
+    helics; 
+    Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSOSim'); 
+    fprintf('Wrapper: Helics version = %s\n', helicsGetVersion)
+    fed = helicsCreateCombinationFederateFromConfig('helics_config.json');
+    
+    pubkeys_count = helicsFederateGetPublicationCount(fed);
+    pub_keys = cell(pubkeys_count, 1);
+    for pub_idx = 1:pubkeys_count
+        pub_object = helicsFederateGetPublicationByIndex(fed, pub_idx-1);
+        pub_keys(pub_idx) = cellstr(helicsPublicationGetName(pub_object));
+    end
+    
+    subkeys_count = helicsFederateGetInputCount(fed);
+    sub_keys = cell(subkeys_count, 1);
+    for sub_idx = 1:subkeys_count
+        sub_object = helicsFederateGetInputByIndex(fed, sub_idx-1);
+        sub_keys(sub_idx) = cellstr(helicsSubscriptionGetTarget(sub_object));
+    end
+    helicsFederateEnterExecutingMode(fed);
+end
     
 tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
+
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
-    
-mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', 'DC');
-mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.nr.max_it', 20, 'pf.enforce_q_lims', 0, 'model', 'DC');
-    
-    %% Increasing the branch 
     
 % while time_granted <= Wrapper.config_data.Duration
 price_range = [10, 30];
 flexiblity = 0.2;
 
-while time_granted <= Wrapper.duration
+while time_granted <= 300
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
-    time_granted = next_helics_time;
-%     mpc.bus(:,12) = 1.3* ones(length(mpc.bus(:,12)),1);
-%     mpc.bus(:,13) = 0.7* ones(length(mpc.bus(:,13)),1);
-%     mpc.gen(:,4) = mpc.gen(:,7);
-%     mpc.gen(:,5) = -1*mpc.gen(:,7);
     
+    if Wrapper.config_data.include_helics
+        time_granted  = helicsFederateRequestTime(fed, next_helics_time)
+    else
+        time_granted = next_helics_time
+    end
     
-    if time_granted >= tnext_real_time_market  
+    if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
             time_granted
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
@@ -60,7 +79,7 @@ while time_granted <= Wrapper.duration
                 Wrapper.mpc.gencost(Generator_index,5:7) = P_Q(Bus_number).bid;     %Polynomial coefficients
             end
             %*************************************************************
-            Wrapper = Wrapper.run_RT_market(time_granted, mpoptOPF);
+            Wrapper = Wrapper.run_RT_market(time_granted);
             %Update Bid loads*********************************************
             %Uses Wrapper
             for i = 1 : length(Wrapper.config_data.cosimulation_bus)
@@ -75,11 +94,19 @@ while time_granted <= Wrapper.duration
             tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
     
-    if time_granted >= tnext_physics_powerflow        
+    if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_real_time_market)     
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
+            
+            % Get data from HELICS
+            
+            for cosim_bus= 1 : length(Wrapper.config_data.cosimulation_bus)
+                a = strfind(sub_keys(sub_idx), strcat('.pcc.', mat2str(cosim_bus), '.pq'))  
+                b = 1 
+            end
+            
             % Collect measurements from distribution networks
-            Wrapper = Wrapper.run_power_flow(time_granted, mpoptPF);    
+            Wrapper = Wrapper.run_power_flow(time_granted);    
             tnext_physics_powerflow = tnext_physics_powerflow + Wrapper.config_data.physics_powerflow.interval;
     end
     
