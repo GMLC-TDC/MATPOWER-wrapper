@@ -4,7 +4,6 @@
 ****************************************
 *Copyright (C) 2018, Battelle Memorial Institute*
 
-*Authors: Laurentiu Dan Marinovici, Jacob Hansen, and Gayathri Krishnamoorthy*
 ****************************************
 
 This repository contains the necessary code in order to simulate Transmission systems that can be used for Co-Simulation with HELICS. This work uses MATPOWER explained below.
@@ -98,66 +97,16 @@ mpc.gencost = [
 ];
 ```
 
-To facilitate the integration of MATPOWER within the HELICS environment, and its connection with distribution-side models, several additions have to be made to the case files to augment the MPC structure, that is:
-<ol>
-  <li>add vectors that specify the dimensions of each matrix in the MPC structure, defining every element of the power system; this helps with easily allocating the correct amount of memory in the C++ wrapper;</li>
-  <li>add a HELICS communication interface that would facilitate the connection between the transmission simulator and the distribution simulator (GridLAB-D); at this stage, the following features are available:</li>
-    <ol>
-      <li>the total number of load buses where distribution sites are going to be connected to and their identification number;</li>
-      <li>the total number of distribution sites that are getting attached to the transmission network, their id and the bus id where they are connected; keep in mind that multiple distribution sites could be connected to the same bus, and their power consumption is going to be aggregated;</li>
-      <li>the total number and the id of the offline generators came in as part of creating scenarios that could affect increases in energy prices due to losing generation; they are application specific, so they could be left out;</li>
-      <li>the amplification factor is meant to adjust the power consumption at the distribution level to an increased value, such that it makes a difference at the transmission level; if the distribution models provide enough load, then this factor could be set to 1.</li>
-    </ol>
-</ol>
-
-The added MATLAB code line are shown below:
-
-```
-%% ======================================================================
-%% HELICS communication interface
-%% This has been added to simplify the set-up process
-%% ======================================================================
-% Number of buses where distribution networks are going to be connected to
-mpc.BusCoSimNum = 3;
-% Buses where distribution networks are going to be connected to
-mpc.BusFNCS = [
-7;
-5;
-9];
-% Number of distribution feeders (GridLAB-D instances)
-mpc.FeederNumCoSim = 3;
-%% Substation names, and the transmission network bus where it is connected to
-mpc.FeederNameCoSim = [
-    Feeder1   9
-    Feeder2   7
-    Feeder3   5
-];
-%% ======================================================================
-%% For creating scenarios for visualization
-%% Setting up the matrix of generators that could become off-line
-% Number of generators that might be turned off-line
-mpc.offlineGenNum = 0;
-% Matrix contains the bus number of the corresponding off-line generators
-mpc.offlineGenBus = [];       
-
-%% ======================================================================
-%% An amplification factor is used to simulate a higher load at the feeder end
-mpc.ampFactor = 100;
-%% ======================================================================
-
-mpc.busData = [ 9 13 ];
-mpc.genData = [ 3 21 ];
-mpc.branchData = [ 9 13 ];
-mpc.areaData = [ 1 2 ];
-mpc.costData = [ 3 7 ];
-```
-
 
 # How to Install and Run MATPOWER with HELICS #
 
-If MATPOWER is one of the simulators used as part of the HELICS environment, the following should be considered.
+The 
 
-## Installation guide - Linux ##
+## Installation guide - MATLAB+Python in Windows ##
+     
+     
+
+## Installation guide - Octave+Python in Linux ##
 
 In order to be able to integrate MATPOWER under Linux in HELICS, without the need of a MathWorks MATLAB full license, the free MATLAB Runtime (MCR) needs to be installed. All the MCR versions can be downloaded [here][linkMCR]. The installed MCR version needs to be the same as the MATLAB version under which the original MATPOWER code has been compiled in, and built into the deployable files *``libMATPOWER.h``* and *``libMATPOWER.so``* under *``/src``*. for this repository MCR R2018a (9.4) is required. MCR encourages you to add certain paths to the *``LD_LIBRARY_PATH``* on your system. However, as this can cause issues on some system this application does not require you to do so.
 
