@@ -28,54 +28,47 @@ The main 3 steps of running a MATPOWER simulation are:
 MATPOWER case files are MATLAB functions (``.m`` files) that specify a set of data matrices corresponding to each component of the studied power system, that is, buses, generators, lines/branches, etc. All these matrices are bundled in a MATLAB structure, referred to as a **M**AT**P**OWER **C**ase (MPC).
 
 
-# How to Install and Run MATPOWER with HELICS #
+# How to Install and Run MATPOWER-wrapper with HELICS #
 
-The MATMATPOWER-wrapper is supported to work with both MATLAB and OCTAVE and has been currently tested to work in Windows and Linux environments. 
+The MATPOWER-wrapper is supported to work with both MATLAB and OCTAVE and has been currently tested to work in Windows and Linux environments. 
+In addition to the wrapper, a demoDSO code is also provided in this repo. The demoDSO is dummy code to emulate ISO-DSO interactions using helics-based cosimulation. 
+
 
 ## Installation guide - MATLAB+Python in Windows ##
 
-```     
-1. Requires MATLAB to be installated and discoverable 
-2. Install matHELICS (Installation instructions can be found here: https://github.com/GMLC-TDC/matHELICS 
-3. Install pyhelics: pip install helics (This will install the python bindings required by the demoDSO)
-```
+     
+  1. Requires MATLAB to be installed and discoverable  
+  2. Install matHELICS (Installation instructions can be found here: [matHELICS](https://github.com/GMLC-TDC/matHELICS)
+  3. Install pyhelics: pip install helics (This will install the python bindings required by the demoDSO)
+
 
 
 ## Installation guide - Octave+Python in Linux ##
 
-In order to be able to integrate MATPOWER under Linux in HELICS, without the need of a MathWorks MATLAB full license, the free MATLAB Runtime (MCR) needs to be installed. All the MCR versions can be downloaded [here][linkMCR]. The installed MCR version needs to be the same as the MATLAB version under which the original MATPOWER code has been compiled in, and built into the deployable files *``libMATPOWER.h``* and *``libMATPOWER.so``* under *``/src``*. for this repository MCR R2018a (9.4) is required. MCR encourages you to add certain paths to the *``LD_LIBRARY_PATH``* on your system. However, as this can cause issues on some system this application does not require you to do so.
 
-To access the MATPOWER functions and pass data back and forth from MATPOWER (transmission, generation, wholesale market simulator) to GridLAB-D (distribution simulator) through HELICS, a C++ wrapper has been written, consisting of:
+  1. Requires Octave to be installed and added to the path 
+  2.  Build HELICS from source with Swig-based bindigns for Octave
+    ```
+    1.1. Navigate to your Installation Directory  (lets us assume it is /home/user/Software/; change this path as appropriate)
+    1.2. mkdir helics_install (make the installation directory for HELICS)
+    1.3. wget https://github.com/GMLC-TDC/HELICS/releases/download/v3.1.1/Helics-v3.1.1-source.tar.gz  (this link downloads the source code for Helics 3.1.1)
+    1.4. mkdir Helics_Source (Creating a directory for the source code that will be obtained from extracting the tar )
+    1.5. tar -xvf Helics-v3.1.1-source.tar.gz -C /home/user/Software/Helics_Source/
+    1.6. cd Helics_Source/ 
+    1.7. mkdir build
+    1.8. cd build/
+    1.9. export CFLAGS="-Wno-error"  (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
+    1.10. export CXXFLAGS="-Wno-error" (There is an octave-swig compatibility issue, this is a temporary work-around by ingoring format-security checks)
+    1.11. cmake -DHELICS_BUILD_OCTAVE_INTERFACE=ON -DCMAKE_INSTALL_PREFIX=/home/helics-user/Software/helics_install ..
+    1.12. make -j8
+    1.13. make install
+    ```
+    This will install the HELICS in the specified *`</home/helics-user/Software/helics_install>`*.
+  3. Install pyhelics: pip install helics (This will install the python bindings required by the demoDSO)
+  
+ 
 
-  * *``src/start_MATPOWER.cpp``* - the main wrapper around the MATPOWER functions that establishes the communication between MATPOWER and HELICS, arranges data according to the type MATLAB requires it or HELICS needs it to make it available to other simulators;
-  * *``src/matpowerintegrator.h``* and *``src/matpowerintegrator.cpp``* - define the functions that integrate MATPOWER within the HELICS environment;
-  * *``src/read_input_data.h``* - includes all definitions of the functions that read and parse the input data, both the load profile that resides in a text file (created in MATLAB from an experimental set of data meant to model a standard daily load shape) and the MATPOWER model in order to construct the correct C++ counterparts for the matrices needed to solve the power flow;
-  * *``src/read_loap_profile.cpp``* - reads in an a-priori built load shape meant to align to a standard daily residential power consumption initialized to the values corresponding to the transmission structure of the MATPOWER model, for the location where distribution models are connected to;
-  * *``src/read_model_dim.cpp``* - reads in the MATPOWER model dimensions in order to be able to allocate the correct memory in the C++ wrapper (Observation. I went this route because I found it hard to make it work with dynamic allocation of memory);
-  * *``src/read_model_data.cpp``* - reads the actual data that describes the transmission network in MATPOWER;
-  * *``CMakeList.txt``* - the cmake process script that dictates the appropriate program files that are to be compiled and linked together, also specifying the paths to MCR and installation (should be modified accordingly)
 
-Lastly you will also need to have HELICS installed on your system. At the moment this repository is compatible with the HELICS 2.0 beta 1 release. Please follow the guides available [here][linkHELICS] to install HELICS.
-
-### Step by step process to install ###
-
-* Ensure that HELICS is mapped to your path environment on your system
-* Ensure that MCR is installed on your system
-* Ensure you are in the root of this repository
-* Execute the following commands:
-
-```
-mkdir build
-cd build
-# if you did not change the default ZMQ or Boost paths
-cmake ../ -DCMAKE_INSTALL_PREFIX=<install path> -DMatlab_ROOT_DIR=<MCR path>
-# if you did change them use
-cmake ../ -DCMAKE_INSTALL_PREFIX=<install path> -DMatlab_ROOT_DIR=<MCR path> -DZeroMQ_ROOT_DIR=<ZMQ path> -DBOOST_ROOT=<boost path>
-make
-make install  
-```
-
-This will install the software in the specified *`<install path>`*.
 
 ## Running guide - Linux ##
 
