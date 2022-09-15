@@ -70,7 +70,7 @@ In addition to the wrapper, a demoDSO code is also provided in this repo. The de
 
 
 
-## Running guide - Linux ##
+## Running guide - Linux ## (needs to be updated)
 
 To run MATPOWER simulator as part of the HELICS environment in Linux, use the guide above to install the software utility. Currently, the way of starting the simulation is through the command line
 
