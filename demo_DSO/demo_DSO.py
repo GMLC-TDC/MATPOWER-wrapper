@@ -145,7 +145,7 @@ if __name__ == "__main__":
         print('DSO: Current Time is {}'.format(current_time))
 
 
-        ######## Power Flow ########
+        ######## Real time Market Intervals ########
         if time_granted >= tnext_real_time_market and wrapper_config['include_real_time_market']:
             
             profile_time = current_time + timedelta(seconds=buffer)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
             
             
             
-        ######## Power Flow ########
+        ######## Power Flow Intervals ########
         if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow']:
             
             profile_time = current_time + timedelta(seconds=buffer)
