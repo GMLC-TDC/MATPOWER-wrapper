@@ -1,6 +1,6 @@
 import math
 import json
-import numpy
+import numpy as np
 import helics as h
 import pandas as pd
 from datetime import datetime, timedelta
@@ -127,8 +127,13 @@ if __name__ == "__main__":
     tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']-buffer
 
 
-    duration = 300
+    # duration = 300
     time_granted = -1
+    
+    flexibility = .20
+    blocks = 10
+    P_range = np.array([10, 30]) 
+    
     while time_granted <= duration:
         
         next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -141,8 +146,53 @@ if __name__ == "__main__":
 
 
         ######## Power Flow ########
-        if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow']:
-            print("hello")
+        if time_granted >= tnext_real_time_market and wrapper_config['include_real_time_market']:
+            
+            profile_time = current_time + timedelta(seconds=buffer)
+            data_idx = load_profiles.index[load_profiles.index == profile_time]
+            current_load_profile = load_profiles.loc[data_idx]
+            for cosim_bus in wrapper_config['cosimulation_bus']:
+                base_kW = case['bus'][cosim_bus-1][2]
+                base_kVAR = case['bus'][cosim_bus - 1][3]
+                current_kW = current_load_profile[cosim_bus].values[0]
+                constant_load = current_kW*(1-flexibility)
+                flex_load = current_kW*(flexibility)
+                Q_values = np.linspace(0, flex_load, blocks)
+                P_values = np.linspace(max(P_range), min(P_range), blocks)
+                
+                
+                current_load = complex(current_kW, current_kW*base_kVAR/base_kW)
+                bid =  dict()
+                bid['constant_kW'] = constant_load
+                bid['constant_kVAR'] = constant_load*base_kVAR/base_kW
+                bid['P_bid'] = list(P_values)
+                bid['Q_bid'] = list(Q_values)
+                
+                
+                bid_raw = json.dumps(bid)
+                
+                 #####  Publishing current loads for Co-SIM Bus the ISO Simulator #####
+                pub_key = [key for key in pub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.bid') in key ]
+                pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
+                status = h.helicsPublicationPublishString(pub_object, bid_raw)
+                print('DSO: Published Bids for Bus {}'.format(cosim_bus))
+                
+                                
+            time_request = time_granted+2
+            while time_granted < time_request:
+                time_granted = h.helicsFederateRequestTime(fed, time_request)
+
+            print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
+
+            for cosim_bus in wrapper_config['cosimulation_bus']:
+                sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.cleared') in key ]
+                sub_object = h.helicsFederateGetSubscription(fed, sub_key[0])
+                allocation_raw = h.helicsInputGetString(sub_object)
+                allocation =  json.loads(allocation_raw)
+                print('DSO: Received cleared values {} for Bus {}'.format(allocation, cosim_bus))
+
+            tnext_real_time_market = tnext_real_time_market + wrapper_config['real_time_market']['interval']           
+            
             
             
         ######## Power Flow ########
@@ -150,11 +200,11 @@ if __name__ == "__main__":
             
             profile_time = current_time + timedelta(seconds=buffer)
             data_idx = load_profiles.index[load_profiles.index == profile_time]
-            current_load_profiles = load_profiles.loc[data_idx]
+            current_load_profile = load_profiles.loc[data_idx]
             for cosim_bus in wrapper_config['cosimulation_bus']:
                 base_kW = case['bus'][cosim_bus-1][2]
                 base_kVAR = case['bus'][cosim_bus - 1][3]
-                current_kW = current_load_profiles[cosim_bus].values
+                current_kW = current_load_profile[cosim_bus].values
                 current_load = complex(current_kW, current_kW*base_kVAR/base_kW)
 
                 #####  Publishing current loads for Co-SIM Bus the ISO Simulator #####

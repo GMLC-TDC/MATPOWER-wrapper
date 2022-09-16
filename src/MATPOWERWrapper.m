@@ -7,10 +7,13 @@ classdef MATPOWERWrapper
       duration
       MATPOWERModifier
       mpc
+      RT_bids =  cell(0)
+      RT_allocations =  cell(0)
       octave
       helics_data = struct()
       profiles = struct();
       results =  struct('PF', 1,'RTM', {},'DAM', {});
+      
    end
    
    methods
@@ -36,11 +39,15 @@ classdef MATPOWERWrapper
            obj.results(1).RTM =  struct('PG',{} , 'PD', {}, 'LMP', {});
            obj.octave = isOctave; 
            
+           if obj.config_data.include_physics_powerflow
+               obj.RT_bids =  cell(length(obj.mpc.bus(:,3)),1);
+               obj.RT_allocations =  cell(length(obj.mpc.bus(:,3)),1);
+           end
+           
        end
        
        %% Loading and Storing profiles in the Wrapper Clasess%% 
        function obj = read_profiles(obj, input_fieldname, output_fieldname)
-         
            
            profile_info = obj.config_data.matpower_most_data.(input_fieldname);
            data_path = obj.config_data.matpower_most_data.datapath; 
@@ -74,9 +81,8 @@ classdef MATPOWERWrapper
            profiles(:,1) = profile_intervals;
            obj.profiles.(output_fieldname) = profiles;
        end 
-       
-       
-       
+        
+       %% Updating current Load from profiles in the Wrapper Clasess%% 
        function obj = update_loads_from_profiles(obj, time, profile_info_fieldname, profile_fieldname)
          
            profile = obj.profiles.(profile_fieldname);
@@ -92,6 +98,7 @@ classdef MATPOWERWrapper
     
        end
        
+       %% Updating VRE Generators from profiles in the Wrapper Clasess%% 
        function obj = update_VRE_from_profiles(obj, time, profile_info_fieldname, profile_fieldname)
          
            profile = obj.profiles.(profile_fieldname);
@@ -105,10 +112,7 @@ classdef MATPOWERWrapper
     
        end
        
-       function obj = update_dispatch_from_cosim(obj, time, values)
-           %% Placeholder
-       end
-       
+       %% Temporary testing functions for bidding%% 
        function [P_Q] = get_bids_from_cosimulation(obj, time, flexibility, price_range)
             
             %%   Get Flex and Inflex loads   %%
@@ -141,7 +145,8 @@ classdef MATPOWERWrapper
 %             plot([0, constant_load, Q],[max(price_range), max(price_range), P]);
             
        end
-           
+        
+       %% Running PF to emulate System States %% 
        function obj = run_power_flow(obj, time)       
 
            mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.nr.max_it', 20, 'pf.enforce_q_lims', 0, 'model', obj.config_data.physics_powerflow.type);
@@ -157,11 +162,13 @@ classdef MATPOWERWrapper
            end       
        end
        
+       %% Running OPF to emulate Real Time Market %% 
        function obj = run_RT_market(obj, time)  
          
            mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
            solution = rundcopf(obj.mpc, mpoptOPF); 
-           obj.mpc.gen(:,2) = solution.gen(:, 2);
+           obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
+           obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
            if solution.success == 1
                if isempty(obj.results.RTM)
                    obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
@@ -177,7 +184,8 @@ classdef MATPOWERWrapper
                %% Increasing the branch flow %%
                obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)*1.2;
                solution = rundcopf(obj.mpc, mpoptOPF); 
-               obj.mpc.gen(:,2) = solution.gen(:, 2);
+               obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
+               obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
                obj.results.RTM.PG  = [obj.results.RTM.PG;  time solution.gen(:, 2)'];
                obj.results.RTM.PD  = [obj.results.RTM.PD;  time solution.bus(:, 3)'];
                obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
@@ -236,7 +244,7 @@ classdef MATPOWERWrapper
             write_json(config_file_name, obj.config_data.helics_config);
        end
        
-       %% Preparing HELICS configuration %%
+       %% Initializing Federate for HELICS-based Co-simulation %%
        function obj = start_helics_federate(obj, config_file_name)
            
            %% Importing the HELICS Libraries %%
@@ -272,7 +280,7 @@ classdef MATPOWERWrapper
        end
        
        %% Updating loads from Cosimulation 
-       function obj = update_loads_from_helics(obj)
+       function obj = get_loads_from_helics(obj)
     
            %% Importing the HELICS Libraries %%
            if obj.octave
@@ -294,7 +302,8 @@ classdef MATPOWERWrapper
            end 
     
        end
-       %% Send updated Voltages to Cosimulation 
+       
+       %% Send updated Voltages to Cosimulation
        function obj = send_voltages_to_helics(obj)
            %% Importing the HELICS Libraries %%
            if obj.octave
@@ -315,6 +324,49 @@ classdef MATPOWERWrapper
                helicsPublicationPublishComplex(pub_object, complex(voltage_real, voltage_imag));
                fprintf('Wrapper: Sending Voltages %d+%d to Cosim bus %d\n', voltage_real, voltage_imag, cosim_bus);
            end
+       end
+            
+       %% Get Bids from Cosimulation
+       function obj = get_bids_from_helics(obj)
+           %% Importing the HELICS Libraries %%
+           if obj.octave
+               helics; 
+           else
+               import helics.*
+           end
+           
+           for bus_idx= 1 : length(obj.config_data.cosimulation_bus)
+               cosim_bus = obj.config_data.cosimulation_bus(bus_idx);
+               temp = strfind(obj.helics_data.sub_keys, strcat('.pcc.', mat2str(cosim_bus), '.rt_energy.bid'));
+               subkey_idx = find(~cellfun(@isempty,temp));
+               sub_object = helicsFederateGetSubscription(obj.helics_data.fed, obj.helics_data.sub_keys{subkey_idx});
+               raw_bid = helicsInputGetString(sub_object);
+               
+               DSO_bid = jsondecode(raw_bid);
+               fprintf('Wrapper: Got bids from Cosim bus %d\n', cosim_bus);
+               obj.RT_bids{cosim_bus} = DSO_bid;
+           end
+       end
+       
+        %% Send Allocations to Cosimulation 
+       function obj = send_allocations_to_helics(obj)
+           %% Importing the HELICS Libraries %%
+           if obj.octave
+               helics; 
+           else
+               import helics.*
+           end
+           
+           for bus_idx= 1 : length(obj.config_data.cosimulation_bus)
+               cosim_bus = obj.config_data.cosimulation_bus(bus_idx);
+               temp = strfind(obj.helics_data.pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.rt_energy.cleared'));
+               pubkey_idx = find(~cellfun(@isempty,temp));
+               pub_object = helicsFederateGetPublication(obj.helics_data.fed, obj.helics_data.pub_keys{pubkey_idx});
+                
+               raw_allocation = jsonencode (obj.RT_allocations{cosim_bus});
+               helicsPublicationPublishString(pub_object, raw_allocation);
+               fprintf('Wrapper: Send Cleared Values to Cosim bus %d\n', cosim_bus);
+            end    
        end
        
    end

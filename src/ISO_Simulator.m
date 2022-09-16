@@ -31,11 +31,11 @@ tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
     
-% while time_granted <= Wrapper.config_data.Duration
+
 price_range = [10, 30];
 flexiblity = 0.2;
 
-while time_granted <= 300
+while time_granted <= Wrapper.duration
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
     
     if Wrapper.config_data.include_helics
@@ -46,14 +46,26 @@ while time_granted <= 300
     end
     
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
-            time_granted
+            time_granted;
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
-            [P_Q]  = Wrapper.get_bids_from_cosimulation(time_granted, flexiblity, price_range);
-          %Wrapper = Wrapper.update_dispatchable_loads(bids)*************
-          %Uses Wrapper, P_Q
+            
+            % Collect Bids from DSO
+            if Wrapper.config_data.include_helics
+                Wrapper = Wrapper.get_bids_from_helics();
+            end
+            
+            %Wrapper = Wrapper.update_dispatchable_loads(bids)*************
+            %Uses Wrapper, P_Q
             for i = 1 : length(Wrapper.config_data.cosimulation_bus)
                 Bus_number = Wrapper.config_data.cosimulation_bus(i,1);
+                DSO_bid = Wrapper.RT_bids{Bus_number};
+                Rel_Cost = DSO_bid.P_bid.*DSO_bid.Q_bid; 
+                for k = 1:length(Rel_Cost)
+                    Actual_cost(k) = sum(Rel_Cost(1:k));
+                end  
+                Coeff = polyfit(-1*DSO_bid.Q_bid, Actual_cost, 2);
+                
                 Generator_index = size(Wrapper.mpc.gen,1) + 1;
                 Wrapper.mpc.genfuel(Generator_index,:) = Wrapper.mpc.genfuel(1,:);  %copy random genfuel entry
                 Wrapper.mpc.gen(Generator_index,:) = 0;                             %new entry of 0's
@@ -61,16 +73,17 @@ while time_granted <= 300
                 Wrapper.mpc.gen(Generator_index,6) = 1;  
                 Wrapper.mpc.gen(Generator_index,8) = 1;                             %gen status on
 %                 Wrapper.mpc.gen(Generator_index,7) = 0;
-                Wrapper.mpc.gen(Generator_index,10) = -1*P_Q(Bus_number).range(2);  %Set reduction range
+                Wrapper.mpc.gen(Generator_index,10) = -1*max(DSO_bid.Q_bid);        %Set reduction range
                 Wrapper.mpc.gencost(Generator_index,:) = 0;                         %new entry of 0's
                 Wrapper.mpc.gencost(Generator_index,1) = 2;                         %Polynomial model
                 Wrapper.mpc.gencost(Generator_index,4) = 3;                         %Degree 3 polynomial
-                Wrapper.mpc.gencost(Generator_index,5:7) = P_Q(Bus_number).bid;     %Polynomial coefficients
+                Wrapper.mpc.gencost(Generator_index,5:7) = Coeff;     %Polynomial coefficients
             end
             %*************************************************************
             Wrapper = Wrapper.run_RT_market(time_granted);
-            %Update Bid loads*********************************************
-            %Uses Wrapper
+            %***********************************************************
+            
+            %Update Allocations
             for i = 1 : length(Wrapper.config_data.cosimulation_bus)
                 Bus_number = Wrapper.config_data.cosimulation_bus(length(Wrapper.config_data.cosimulation_bus)-i+1,1);
                 Generator_index = size(Wrapper.mpc.gen,1);
@@ -78,8 +91,15 @@ while time_granted <= 300
                 Wrapper.mpc.genfuel(Generator_index,:) = [];
                 Wrapper.mpc.gen(Generator_index,:) = [];
                 Wrapper.mpc.gencost(Generator_index,:) = [];
+                Wrapper.RT_allocations{Bus_number}.P_clear =  Wrapper.mpc.bus(Bus_number,14); 
+                Wrapper.RT_allocations{Bus_number}.Q_clear =  Wrapper.mpc.bus(Bus_number,3);       
             end
             %*************************************************************
+            % Collect Allocations from DSO
+            if Wrapper.config_data.include_helics
+                Wrapper = Wrapper.send_allocations_to_helics();
+            end
+            
             tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
     
@@ -87,13 +107,14 @@ while time_granted <= 300
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             
-            if Wrapper.config_data.include_helics  
-                Wrapper = Wrapper.update_loads_from_helics();
-            end
-            
             % Collect measurements from distribution networks
+            if Wrapper.config_data.include_helics  
+                Wrapper = Wrapper.get_loads_from_helics();
+            end
+            %*************************************************************
             Wrapper = Wrapper.run_power_flow(time_granted);  
-            
+            %*************************************************************
+            % Send Voltages from distribution networks
             if Wrapper.config_data.include_helics  
                 Wrapper = Wrapper.send_voltages_to_helics();
             end
