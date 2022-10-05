@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # duration = 300
     time_granted = -1
     
-    flexibility = 0.4
+    flexibility = .25
     blocks = 10
     P_range = np.array([10, 30]) 
     

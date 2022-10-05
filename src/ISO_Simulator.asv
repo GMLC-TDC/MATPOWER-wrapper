@@ -2,7 +2,6 @@ clc
 clear all
 clear classes
 
-case_name = 'Flex25';
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
@@ -34,8 +33,7 @@ next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_
     
 
 price_range = [10, 30];
-flexiblity = 0.25;
-blocks = 10;
+flexiblity = 0.1;
 
 while time_granted <= Wrapper.duration
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -45,7 +43,6 @@ while time_granted <= Wrapper.duration
         fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
     else
         time_granted = next_helics_time;
-        fprintf('Wrapper: Current Time %d\n', time_granted)
     end
     
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
@@ -56,8 +53,6 @@ while time_granted <= Wrapper.duration
             % Collect Bids from DSO
             if Wrapper.config_data.include_helics
                 Wrapper = Wrapper.get_bids_from_helics();
-            else
-                Wrapper = Wrapper.get_bids_from_cosimulation(time_granted, flexiblity, price_range, blocks);
             end
             
             %*************************************************************
@@ -98,9 +93,12 @@ while time_granted <= Wrapper.duration
 
 end
 
-Wrapper.write_results(case_name)
-
-if Wrapper.config_data.include_helics 
-    helicsFederateDestroy(Wrapper.helics_data.fed)
-    helics.helicsCloseLibrary()
+if Wrapper.include_real_time_market
+    names = fieldnames(Wrapper.results.RTM)
+    for idx 
+               
 end
+
+
+helicsFederateDestroy(Wrapper.helics_data.fed)
+helics.helicsCloseLibrary()

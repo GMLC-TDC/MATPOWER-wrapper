@@ -113,7 +113,7 @@ classdef MATPOWERWrapper
        end
        
        %% Temporary testing functions for bidding%% 
-       function obj = get_bids_from_cosimulation(obj, time, flexibility, price_range, blocks)
+       function [P_Q] = get_bids_from_cosimulation(obj, time, flexibility, price_range)
             
             %%   Get Flex and Inflex loads   %%
             cosim_buses = obj.config_data.cosimulation_bus;
@@ -123,18 +123,24 @@ classdef MATPOWERWrapper
                 profile = obj.profiles.('load_profile');
                 profile_row = find(time==profile(:,1));
                 load_data = profile(profile_row, cosim_bus+1);
-                kW_kVAR_factor = obj.mpc.bus(cosim_bus,3)/obj.mpc.bus(cosim_bus,4);
                 constant_load = load_data*(1-flexibility); 
-                flex_load = load_data*(flexibility);                
-                Q_values = linspace(0, flex_load, blocks);
-                P_values = linspace(max(price_range), min(price_range),blocks); 
-                
-                DSO_bid = struct();
+                flex_load = load_data*(flexibility); 
+                Q_values = linspace(0, flex_load, blocks)
+                P_values = linspace(max(price_range), min(price_range),blocks);
+                LMPvsQ = polyfit(Q_values,P_values,1);
+                Q = linspace(0, flex_load, 10);
+                P = polyval(LMPvsQ, Q);
+                Rel_Cost = 1*P.*(Q); 
+                for i = 1:length(Rel_Cost)
+                    Actual_cost(i) = sum(Rel_Cost(1:i));
+                end    
+                DSO_bid = struct()
                 DSO_bid.P_bid = P_values;
                 DSO_bid.Q_bid = Q_values;
-                DSO_bid.constant_kW = constant_load;
-                DSO_bid.constant_kVAR = constant_load/kW_kVAR_factor;
-                obj.RT_bids{cosim_bus} = DSO_bid;
+                obj.RT_bids{cosim_bus} = DSO_bid
+                P_Q(cosim_bus).bid = polyfit(Q,Actual_cost,2);
+                P_Q(cosim_bus).range = [0,flex_load];
+                P_Q(cosim_bus).constant_load = constant_load;
             end
             
             %%   Plotting PQ Bids   %%
