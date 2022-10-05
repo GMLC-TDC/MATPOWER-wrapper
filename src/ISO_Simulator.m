@@ -1,6 +1,6 @@
-clc
-clear all
-clear classes
+% clc
+% clear all
+% clear classes
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
@@ -33,7 +33,7 @@ next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_
     
 
 price_range = [10, 30];
-flexiblity = 0.2;
+flexiblity = 0.1;
 
 while time_granted <= Wrapper.duration
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -60,12 +60,18 @@ while time_granted <= Wrapper.duration
             for i = 1 : length(Wrapper.config_data.cosimulation_bus)
                 Bus_number = Wrapper.config_data.cosimulation_bus(i,1);
                 DSO_bid = Wrapper.RT_bids{Bus_number};
-                Rel_Cost = DSO_bid.P_bid.*DSO_bid.Q_bid; 
-                for k = 1:length(Rel_Cost)
-                    Actual_cost(k) = sum(Rel_Cost(1:k));
+                Actual_cost = zeros(length(DSO_bid.Q_bid),1);
+                for k = 1:length(DSO_bid.Q_bid)
+                    if k == 1
+                        Actual_cost(k) = 0 + (DSO_bid.Q_bid(k) - 0)*DSO_bid.P_bid(k) ;
+                    else
+                        Actual_cost(k) = Actual_cost(k-1) + (DSO_bid.Q_bid(k) - DSO_bid.Q_bid(k-1))*DSO_bid.P_bid(k) ;
+                    end
                 end  
-                Coeff = polyfit(-1*DSO_bid.Q_bid, Actual_cost, 2);
+                Coeff = polyfit(-1*DSO_bid.Q_bid, -1*Actual_cost, 2);
                 
+                Wrapper.mpc.bus(Bus_number,3) = DSO_bid.constant_kW; 
+                Wrapper.mpc.bus(Bus_number,4) = DSO_bid.constant_kVAR; 
                 Generator_index = size(Wrapper.mpc.gen,1) + 1;
                 Wrapper.mpc.genfuel(Generator_index,:) = Wrapper.mpc.genfuel(1,:);  %copy random genfuel entry
                 Wrapper.mpc.gen(Generator_index,:) = 0;                             %new entry of 0's
