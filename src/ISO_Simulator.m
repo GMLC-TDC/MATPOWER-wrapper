@@ -1,8 +1,9 @@
 clc
 clear all
 clear classes
+warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
-case_name = 'Flex25';
+case_name = 'Poly25';
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
@@ -38,8 +39,7 @@ flexiblity = 0.25;
 blocks = 10;
 
 while time_granted <= Wrapper.duration
-    next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
-    
+    next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market]);
     if Wrapper.config_data.include_helics
         time_granted  = helicsFederateRequestTime(Wrapper.helics_data.fed, next_helics_time);
         fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)

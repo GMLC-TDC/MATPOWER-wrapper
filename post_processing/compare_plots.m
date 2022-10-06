@@ -3,7 +3,7 @@ clear all
 clear classes
 close all
 
-Cases = {'Base', 'Flex25'};
+Cases = {'Base','Poly10','Poly25'};
 case_data = read_json('../src/wrapper_config.json');
 start_time = datetime(case_data.start_time)
 
@@ -26,7 +26,7 @@ set(gca, 'FontName', 'Times New Roman')
 xlabel(a,'Time of Day (Hr)','FontSize',14)
 set(gca, 'FontName', 'Times New Roman')
 grid on 
-
+%legend('0%','polynomial(10%)','Polynomial(25%)')
 
 
 %% Compare Dispatchable Loads %%%
@@ -47,9 +47,9 @@ for case_idx = 1:length(Cases)
         co_sim_bus = co_sim_buses(idx);
         plot(time_data,case_data_PD(:,co_sim_bus+1),linS{case_idx},'LineWidth',1.5)
         hold on 
-        if strfind(casename,'Base')
-            plot(time_data,case_data_PD(:,co_sim_bus+1)*(1-ref),linS{case_idx},'LineWidth',1.5)
-        end
+%         if strfind(casename,'Base')
+%             plot(time_data,case_data_PD(:,co_sim_bus+1)*(1-ref),linS{case_idx},'LineWidth',1.5)
+%         end
         Legend{iter}=strcat(casename,'- Bus:', num2str(co_sim_bus));
         iter = iter+1;
     end

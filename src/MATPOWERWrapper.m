@@ -136,12 +136,7 @@ classdef MATPOWERWrapper
                 DSO_bid.constant_kVAR = constant_load/kW_kVAR_factor;
                 obj.RT_bids{cosim_bus} = DSO_bid;
             end
-            
-            %%   Plotting PQ Bids   %%
-%             Q = linspace(constant_load, constant_load+flex_load, 10);
-%             P = polyval(P_Q(cosim_bus).bid, Q);
-%             plot([0, constant_load, Q],[max(price_range), max(price_range), P]);
-            
+
        end
         
        %% Running PF to emulate System States %% 
@@ -175,6 +170,7 @@ classdef MATPOWERWrapper
                        Actual_cost(k) = Actual_cost(k-1) + (DSO_bid.Q_bid(k) - DSO_bid.Q_bid(k-1))*DSO_bid.P_bid(k) ;
                    end
                end  
+
                Coeff = polyfit(-1*DSO_bid.Q_bid, -1*Actual_cost, 2);
                %***** Updating the unresponsive bus loads *****%
                obj.mpc.bus(Bus_number,3) = DSO_bid.constant_kW; 
@@ -191,9 +187,20 @@ classdef MATPOWERWrapper
                obj.mpc.gen(Generator_index,10) = -1*max(DSO_bid.Q_bid);        %Set reduction range
                %***** Updating the responsive bus costs *****%
                obj.mpc.gencost(Generator_index,:) = 0;                         %new entry of 0's
-               obj.mpc.gencost(Generator_index,1) = 2;                         %Polynomial model
-               obj.mpc.gencost(Generator_index,4) = 3;                         %Degree 3 polynomial
-               obj.mpc.gencost(Generator_index,5:7) = Coeff;     %Polynomial coefficients
+               if strfind(obj.config_data.real_time_market.bid_model,"Poly")
+                   obj.mpc.gencost(Generator_index,1) = 2;                  %Polynomial model
+                   obj.mpc.gencost(Generator_index,4) = 3;                  %Degree 3 polynomial
+                   obj.mpc.gencost(Generator_index,5:7) = Coeff;            %Polynomial coefficients
+               else
+                   obj.mpc.gencost(Generator_index,1) = 1;                              %Block model
+                   obj.mpc.gencost(Generator_index,4) = length(DSO_bid.Q_bid);          %# of blocks
+                   [Q_reverse, idx] = sort(-1*DSO_bid.Q_bid);
+                   Cost_reverse = -1*Actual_cost(idx);
+                   for a = 1:length(DSO_bid.Q_bid)
+                       obj.mpc.gencost(Generator_index,3+(2*a)) = Q_reverse(a);
+                       obj.mpc.gencost(Generator_index,4+(2*a)) = Cost_reverse(a);
+                   end
+               end
            end
             
            success = 0; tries = 0 ; 
