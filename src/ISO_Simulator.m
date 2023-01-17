@@ -3,7 +3,11 @@ clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
+<<<<<<< HEAD
+case_name = 'Aug_Flex0';
+=======
 case_name = 'Poly25';
+>>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
@@ -28,24 +32,33 @@ end
     
 tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
-tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
+% tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
+tnext_day_ahead_market = 0;
 
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
     
-
+%% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 price_range = [10, 30];
 flexiblity = 0.25;
 blocks = 10;
 
+%% ISO Simulator Starts here
 while time_granted <= Wrapper.duration
+<<<<<<< HEAD
+    
     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market]);
+    
+=======
+    next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market]);
+>>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
     if Wrapper.config_data.include_helics
         time_granted  = helicsFederateRequestTime(Wrapper.helics_data.fed, next_helics_time);
-        fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
+%         fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
+        fprintf('Wrapper: Current Time %s\n', (datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
     else
         time_granted = next_helics_time;
-        fprintf('Wrapper: Current Time %d\n', time_granted)
+        fprintf('Wrapper: Current Time %s\n', string(datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
     end
     
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
@@ -57,7 +70,7 @@ while time_granted <= Wrapper.duration
             if Wrapper.config_data.include_helics
                 Wrapper = Wrapper.get_bids_from_helics();
             else
-                Wrapper = Wrapper.get_bids_from_cosimulation(time_granted, flexiblity, price_range, blocks);
+                Wrapper = Wrapper.get_bids_from_wrapper(time_granted, flexiblity, price_range, blocks);
             end
             
             %*************************************************************
@@ -72,6 +85,57 @@ while time_granted <= Wrapper.duration
             
             tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
+    if (time_granted >= tnext_day_ahead_market) && (Wrapper.config_data.include_day_ahead_market)
+        fprintf('Wrapper: Current Time %s\n', (datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
+        Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        
+        gen_info = Wrapper.config_data.matpower_most_data.('wind_profile_info');
+        gen_idx = gen_info.data_map.gen;
+        data_idx = gen_info.data_map.columns;
+        
+        gen_struct = dam_gen_profiles(Wrapper.forecast.wind_profile, gen_idx, data_idx);
+    
+        load_info = Wrapper.config_data.matpower_most_data.('load_profile_info');
+        load_idx = load_info.data_map.bus;
+        data_idx = load_info.data_map.columns;
+        load_struct = dam_load_profile(Wrapper.forecast.load_profile, load_idx, data_idx);
+
+        profiles = getprofiles(gen_struct); 
+        profiles = getprofiles(load_struct, profiles);
+        mpc = Wrapper.mpc;
+        mpc.gen(:, 17:20) = Inf;
+        mpc.branch(:,6:8) = mpc.branch(:,6:8)*1.25
+        nt = size(profiles(1).values, 1);
+        nt = 24
+        mdi = loadmd(mpc, nt, [], [], [], profiles);
+        
+        define_constants;
+        % mpopt = mpoption('verbose', 3, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver', 'GLPK');
+        mpopt = mpoption('verbose', 0, 'out.all', 0, 'most.dc_model', 1);
+        mdo = most(mdi, mpopt);
+        ms = most_summary(mdo);
+        % save('-text', 'msout.txt', 'ms');
+
+        time = linspace(1, nt, nt);
+        figure;
+        a=subplot(2,1,1);
+        set(a,'Units','normalized');
+        plot(time, ms.Pg, '-','LineWidth',1.5)
+        a=subplot(2,1,2);
+        set(a,'Units','normalized');
+        plot(time, ms.lamP,'-','LineWidth',1.5)
+        
+        figure;
+        a=axes();
+        set(a,'Units','normalized');
+        plot(time, ms.Pd,'-','LineWidth',1.5)
+        a =1;
+
+
+    end
+    
+    
     
     if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_physics_powerflow)     
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
@@ -92,10 +156,6 @@ while time_granted <= Wrapper.duration
             tnext_physics_powerflow = tnext_physics_powerflow + Wrapper.config_data.physics_powerflow.interval;
     end
     
-    if time_granted == Wrapper.duration     %end infinite loop
-        time_granted = Wrapper.duration+1;
-    end
-
 end
 
 Wrapper.write_results(case_name)

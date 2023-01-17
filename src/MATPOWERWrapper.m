@@ -12,6 +12,7 @@ classdef MATPOWERWrapper
       octave
       helics_data = struct()
       profiles = struct();
+      forecast= struct();
       results =  struct('PF', 1,'RTM', {},'DAM', {});
       
    end
@@ -76,7 +77,7 @@ classdef MATPOWERWrapper
            for idx = 1: length(profile_info.data_map.columns)
                data_idx = profile_info.data_map.columns(idx);
                %fprintf('Loading %s for bus/gen %d from input column \n', output_fieldname, data_idx);
-               [profiles(:,data_idx), profile_intervals] = interpolate_profile_to_powerflow_interval(data(:,data_idx), input_resolution, required_resolution, obj.duration);
+               [profiles(:,data_idx), profile_intervals] = interpolate_profile_to_interval(data(:,data_idx), input_resolution, required_resolution, obj.duration);
            end
            profiles(:,1) = profile_intervals;
            obj.profiles.(output_fieldname) = profiles;
@@ -113,7 +114,7 @@ classdef MATPOWERWrapper
        end
        
        %% Temporary testing functions for bidding%% 
-       function obj = get_bids_from_cosimulation(obj, time, flexibility, price_range, blocks)
+       function obj = get_bids_from_wrapper(obj, time, flexibility, price_range, blocks)
             
             %%   Get Flex and Inflex loads   %%
             cosim_buses = obj.config_data.cosimulation_bus;
@@ -204,15 +205,20 @@ classdef MATPOWERWrapper
            end
             
            success = 0; tries = 0 ; 
-           while success < 1 || tries > 2
+           while success < 1 && tries < 5
                mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
                solution = rundcopf(obj.mpc, mpoptOPF); 
                success = solution.success;
                tries = tries + 1;
+               %***** Updating the Line Limits *****%
                if success == 0
-                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with increased line limits',tries);
+                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with 10 Percent. more line limits\n',tries);
                    obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)*1.1;
                end
+           end
+           %***** Setting the Line Limits back to original*****%
+           if tries > 1  
+               obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)/(1.1^(tries-1));   
            end
            
            %************* Wrapper.updating Allocations (bids)*************%
@@ -233,18 +239,21 @@ classdef MATPOWERWrapper
            end
            
            %************* Wrapper.Saving Results*************%
-           obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
-           obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
-           if isempty(obj.results.RTM)
-               obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
-               obj.results.RTM(1).PD  = [time solution.bus(:, 3)'];
-               obj.results.RTM(1).LMP = [time solution.bus(:, 14)'];
+           if success == 1
+               obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
+               obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
+               if isempty(obj.results.RTM)
+                   obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
+                   obj.results.RTM(1).PD  = [time solution.bus(:, 3)'];
+                   obj.results.RTM(1).LMP = [time solution.bus(:, 14)'];
+               else
+                   obj.results.RTM.PG  = [obj.results.RTM.PG;  time solution.gen(:, 2)'];
+                   obj.results.RTM.PD  = [obj.results.RTM.PD;  time solution.bus(:, 3)'];
+                   obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
+               end
            else
-               obj.results.RTM.PG  = [obj.results.RTM.PG;  time solution.gen(:, 2)'];
-               obj.results.RTM.PD  = [obj.results.RTM.PD;  time solution.bus(:, 3)'];
-               obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
+               failed;    
            end
-                
        end
        
        %% Preparing HELICS configuration %%
@@ -422,6 +431,26 @@ classdef MATPOWERWrapper
             end    
        end
        
+       
+       %% Loading and Storing profiles in the Wrapper Clasess%% 
+       function obj = get_DA_forecast(obj, input_fieldname, current_time, interval)
+           
+           profile = obj.profiles.(input_fieldname);
+           
+           start_idx = find(current_time == profile(:,1));
+           end_idx   = find(current_time+interval == profile(:,1));
+           daily_profile = profile(start_idx:end_idx,:);
+           input_resolution = daily_profile(2,1) - daily_profile(1,1);
+
+           DA_forecast= [];
+           for idx = 2: size(profile, 2)
+               [DA_forecast(:,idx), forecast_intervals] = interpolate_profile_to_interval(daily_profile(:,idx), input_resolution, 3600, interval);
+           end
+           DA_forecast(:,1) = forecast_intervals;
+           obj.forecast.(input_fieldname) = DA_forecast(2:end,:);
+       end
+       
+       
        %% Write Wrapper Results to csv
        function write_results(obj,case_name)
            
@@ -443,16 +472,13 @@ classdef MATPOWERWrapper
        
    end
 
-end  
-
-
-
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%% Interpolate Input Profile  %%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Utility Functions %%
-function [required_profile, required_intervals] = interpolate_profile_to_powerflow_interval(input_data, input_data_resolution, required_resolution, duration)
+function [required_profile, required_intervals] = interpolate_profile_to_interval(input_data, input_data_resolution, required_resolution, duration)
   
             raw_data_duration  = (length(input_data)-1)*input_data_resolution;
             raw_data_intervals = linspace(0, raw_data_duration, (raw_data_duration/input_data_resolution)+1)';
