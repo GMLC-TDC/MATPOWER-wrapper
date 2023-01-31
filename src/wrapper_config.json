@@ -30,7 +30,6 @@
       }
     },
     "wind_profile_info": {
-<<<<<<< HEAD
     	"filename": "2016_ERCOT_5min_wind_data.csv",
     	"resolution": 300,
     	"starting_time": "2016-01-01 00:00:00",
@@ -42,133 +41,29 @@
  	},
   "results_files": "../results/", 
   "start_time": "2016-08-01 00:00:00", 
-  "end_time": "2016-08-03 00:00:00", 
+  "end_time": "2016-08-02 00:00:00", 
   "include_contingencies": false, 
-=======
-      "filename": "2016_ERCOT_5min_wind_data.csv",
-      "resolution": 300,
-      "starting_time": "2016-01-01 00:00:00",
-      "data_map": {
-        "columns": [
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16,
-          17,
-          18,
-          19,
-          20,
-          21,
-          22,
-          23,
-          24,
-          25,
-          26,
-          27,
-          28,
-          29,
-          30,
-          31,
-          32,
-          33,
-          34,
-          35
-        ],
-        "gen": [
-          77,
-          78,
-          79,
-          80,
-          81,
-          82,
-          83,
-          84,
-          85,
-          86,
-          87,
-          88,
-          89,
-          90,
-          91,
-          92,
-          93,
-          94,
-          95,
-          96,
-          97,
-          98,
-          99,
-          100,
-          101,
-          102,
-          103,
-          104,
-          105,
-          106,
-          107,
-          108,
-          109,
-          110
-        ]
-      }
-    }
-  },
-  "results_files": "../results/",
-  "start_time": "2016-05-10 00:00:00",
-  "end_time": "2016-05-13 00:00:00",
-  "include_contingencies": false,
->>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
+
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
   "include_reserve_requirements": false,
   "include_line_limits": true,
-  "include_physics_powerflow": true,
-<<<<<<< HEAD
-  "include_real_time_market": true, 
+  "include_physics_powerflow": false,
+  "include_real_time_market": false, 
   "include_day_ahead_market": true, 
   "include_helics": false, 
   "cosimulation_bus": [2, 3],
   "physics_powerflow":{
-=======
-  "include_real_time_market": true,
-  "include_day_ahead_market": false,
-  "include_helics": false,
-  "cosimulation_bus": [
-    2,
-    3
-  ],
-  "physics_powerflow": {
->>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
     "type": "DC",
     "interval": 60
   },
   "real_time_market": {
     "type": "DC",
-<<<<<<< HEAD
     "interval": 300, 
     "transactive": true,
 	"bid_model": "polynomial"
-	
   }, 
   "day_ahead_market":{
-=======
-    "interval": 300,
-    "transactive": true,
-    "bid_model": "Polynomial"
-  },
-  "day_ahead_market": {
->>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
     "type": "DC",
     "interval": 86400,
     "transactive": true

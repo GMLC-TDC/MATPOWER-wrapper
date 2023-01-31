@@ -3,11 +3,8 @@ clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
-<<<<<<< HEAD
-case_name = 'Aug_Flex0';
-=======
 case_name = 'Poly25';
->>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
+
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
@@ -45,13 +42,10 @@ blocks = 10;
 
 %% ISO Simulator Starts here
 while time_granted <= Wrapper.duration
-<<<<<<< HEAD
-    
-    next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market]);
-    
-=======
-    next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market]);
->>>>>>> 385427cd2fee556b1775e81432e4de7493f211d7
+
+%     next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
+    next_helics_time =  min([tnext_day_ahead_market]);
+
     if Wrapper.config_data.include_helics
         time_granted  = helicsFederateRequestTime(Wrapper.helics_data.fed, next_helics_time);
 %         fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
@@ -85,6 +79,8 @@ while time_granted <= Wrapper.duration
             
             tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
+    
+    
     if (time_granted >= tnext_day_ahead_market) && (Wrapper.config_data.include_day_ahead_market)
         fprintf('Wrapper: Current Time %s\n', (datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
         Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
@@ -105,14 +101,13 @@ while time_granted <= Wrapper.duration
         profiles = getprofiles(load_struct, profiles);
         mpc = Wrapper.mpc;
         mpc.gen(:, 17:20) = Inf;
-        mpc.branch(:,6:8) = mpc.branch(:,6:8)*1.25
+        mpc.branch(:,6:8) = mpc.branch(:,6:8)*1.25;
         nt = size(profiles(1).values, 1);
-        nt = 24
         mdi = loadmd(mpc, nt, [], [], [], profiles);
         
         define_constants;
         % mpopt = mpoption('verbose', 3, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver', 'GLPK');
-        mpopt = mpoption('verbose', 0, 'out.all', 0, 'most.dc_model', 1);
+        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
         mdo = most(mdi, mpopt);
         ms = most_summary(mdo);
         % save('-text', 'msout.txt', 'ms');
@@ -132,9 +127,8 @@ while time_granted <= Wrapper.duration
         plot(time, ms.Pd,'-','LineWidth',1.5)
         a =1;
 
-
+        tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
     end
-    
     
     
     if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_physics_powerflow)     
