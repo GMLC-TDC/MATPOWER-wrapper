@@ -39,6 +39,7 @@ next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_
 price_range = [10, 30];
 flexibility = 0.25;      %Defines maximum flexibility as a % of total load
 flex_profile = [1;1;1;1;0.5;0.5;0.5;0.5;1;1;1;1;0;0;0;0;1;1;1;1;0;0;0;0]; % Percentage of flexibility allowed for each hour increment (1 = max flex)
+flex_profile = ones(24,1);
 blocks = 10;
 
 %% ISO Simulator Starts here
@@ -145,7 +146,7 @@ while time_granted < Wrapper.duration
         mpc.genfuel(add_gen_index,:) = mpc.genfuel(1,:); %Copy genfuel from 1
         mpc.gen(add_gen_index,:) = 0;   %new entry of 0's
         mpc.gen(add_gen_index,1) = 1;   %set bus to 1 *Hardcoded*
-        mpc.gen(add_gen_index,4) = flexibility * abs(Wrapper.mpc.bus(1,4));% Maximum reactive power output .gen(,4)
+%         mpc.gen(add_gen_index,4) = flexibility * abs(Wrapper.mpc.bus(1,4));% Maximum reactive power output .gen(,4)
         mpc.gen(add_gen_index,5) = -1 * flexibility * abs(Wrapper.mpc.bus(1,4));% Minimum reactive power output .gen(,5)
         mpc.gen(add_gen_index,6) = 1;   %Voltage 1 p.u.
         mpc.gen(add_gen_index,8) = 1;   %gen status on
