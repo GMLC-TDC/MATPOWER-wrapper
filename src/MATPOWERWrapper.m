@@ -491,16 +491,25 @@ classdef MATPOWERWrapper
        %% Write Wrapper Results to csv
        function write_results(obj,case_name)
            
-           %****** Creating the Ouputs Directory ******%
+           %% ****** Creating the Ouputs Directory ****** %%
            if ~exist('../outputs', 'dir')
                mkdir('../outputs')               
            end  
-           %****** Dumping the results for RT market ******%
+           %% ****** Dumping the results for RT market ****** %%
            if obj.config_data.include_real_time_market
                names = fieldnames(obj.results.RTM);
                for idx = 1:length(names)
                    file_name = strcat('../outputs/',case_name,'_RTM_',names{idx},'.csv');
                    writematrix(obj.results.RTM.(names{idx}), file_name);
+               end          
+           end
+           
+           %% ****** Dumping the results for DA market ****** %%
+           if obj.config_data.include_day_ahead_market
+               names = fieldnames(obj.results.DAM);
+               for idx = 1:length(names)
+                   file_name = strcat('../outputs/',case_name,'_DAM_',names{idx},'.csv');
+                   writematrix(obj.results.DAM.(names{idx}), file_name);
                end          
            end
            
