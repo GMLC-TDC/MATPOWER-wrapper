@@ -7,8 +7,10 @@ classdef MATPOWERWrapper
       duration
       MATPOWERModifier
       mpc
-      RT_bids =  cell(0)
-      RT_allocations =  cell(0)
+      RTM_bids =  cell(0)
+      RTM_allocations =  cell(0)
+      DAM_bids =  cell(0)
+      DAM_allocations =  cell(0)
       octave
       helics_data = struct()
       profiles = struct();
@@ -41,8 +43,8 @@ classdef MATPOWERWrapper
            obj.octave = isOctave; 
            
            if obj.config_data.include_physics_powerflow
-               obj.RT_bids =  cell(length(obj.mpc.bus(:,3)),1);
-               obj.RT_allocations =  cell(length(obj.mpc.bus(:,3)),1);
+               obj.RTM_bids =  cell(length(obj.mpc.bus(:,3)),1);
+               obj.RTM_allocations =  cell(length(obj.mpc.bus(:,3)),1);
            end
            
        end
@@ -113,18 +115,16 @@ classdef MATPOWERWrapper
     
        end
        
-       %% Temporary testing functions for bidding%% 
-       function obj = get_bids_from_wrapper(obj, time, flexibility, price_range, blocks)
-            
-            %%   Get Flex and Inflex loads   %%
-            cosim_buses = obj.config_data.cosimulation_bus;
-            P_Q = struct;
+       %% Temporary testing functions for RTM bidding%% 
+       function obj = get_RTM_bids_from_wrapper(obj, time, flexibility, price_range, blocks)        
+            %   Get Flex and Inflex loads   %
+            cosim_buses = obj.config_data.day_ahead_market.cosimulation_bus;
             for i = 1:length(cosim_buses)
                 cosim_bus = cosim_buses(i);
                 profile = obj.profiles.('load_profile');
                 profile_row = find(time==profile(:,1));
                 load_data = profile(profile_row, cosim_bus+1);
-                kW_kVAR_factor = obj.mpc.bus(cosim_bus,3)/obj.mpc.bus(cosim_bus,4);
+                MW_MVAR_factor = obj.mpc.bus(cosim_bus,3)/obj.mpc.bus(cosim_bus,4);
                 constant_load = load_data*(1-flexibility); 
                 flex_load = load_data*(flexibility);                
                 Q_values = linspace(0, flex_load, blocks);
@@ -133,13 +133,38 @@ classdef MATPOWERWrapper
                 DSO_bid = struct();
                 DSO_bid.P_bid = P_values;
                 DSO_bid.Q_bid = Q_values;
-                DSO_bid.constant_kW = constant_load;
-                DSO_bid.constant_kVAR = constant_load/kW_kVAR_factor;
-                obj.RT_bids{cosim_bus} = DSO_bid;
+                DSO_bid.constant_MW = constant_load;
+                DSO_bid.constant_MVAR = constant_load/MW_MVAR_factor;
+                obj.RTM_bids{cosim_bus} = DSO_bid;
+            end
+       end
+       
+       %% Temporary testing functions for DAM bidding%% 
+       function obj = get_DAM_bids_from_wrapper(obj, time, flexiblity_profile, price_range, blocks)  
+            %   Get Flex and Inflex loads   %
+            cosim_buses = obj.config_data.day_ahead_market.cosimulation_bus;
+            load_forecast = obj.forecast.('load_profile');
+            for i = 1:length(cosim_buses)
+                cosim_bus = cosim_buses(i);
+                load_data = load_forecast(:, cosim_bus+1);
+                MW_MVAR_factor = obj.mpc.bus(cosim_bus,3)/obj.mpc.bus(cosim_bus,4);
+                for t = 1: length(flexiblity_profile)
+                    constant_load(t,1) = load_data(t)*(1-flexiblity_profile(t)); 
+                    flex_load(t,1) = load_data(t)*flexiblity_profile(t);                
+                    Q_values(t,:) = linspace(0, flex_load(t), blocks);
+                    P_values(t,:) = linspace(max(price_range), min(price_range),blocks)'; 
+                end
+                
+                DSO_bid = struct();
+                DSO_bid.P_bid = P_values;
+                DSO_bid.Q_bid = Q_values;
+                DSO_bid.constant_MW = constant_load;
+                DSO_bid.constant_MVAR = constant_load/MW_MVAR_factor;
+                obj.DAM_bids{cosim_bus} = DSO_bid;
+                
             end
 
        end
-        
        %% Running PF to emulate System States %% 
        function obj = run_power_flow(obj, time)       
 
@@ -162,7 +187,7 @@ classdef MATPOWERWrapper
            %************* Wrapper.update_dispatchable_loads(bids)*************
            for i = 1 : length(obj.config_data.cosimulation_bus)
                Bus_number = obj.config_data.cosimulation_bus(i,1);
-               DSO_bid = obj.RT_bids{Bus_number};
+               DSO_bid = obj.RTM_bids{Bus_number};
                Actual_cost = zeros(length(DSO_bid.Q_bid),1);
                for k = 1:length(DSO_bid.Q_bid)
                    if k == 1
@@ -174,9 +199,9 @@ classdef MATPOWERWrapper
 
                Coeff = polyfit(-1*DSO_bid.Q_bid, -1*Actual_cost, 2);
                %***** Updating the unresponsive bus loads *****%
-               obj.mpc.bus(Bus_number,3) = DSO_bid.constant_kW; 
-               obj.mpc.bus(Bus_number,4) = DSO_bid.constant_kVAR; 
-               kW_kVAR_factor = DSO_bid.constant_kW / DSO_bid.constant_kVAR;
+               obj.mpc.bus(Bus_number,3) = DSO_bid.constant_MW; 
+               obj.mpc.bus(Bus_number,4) = DSO_bid.constant_MVAR; 
+               kW_kVAR_factor = DSO_bid.constant_MW / DSO_bid.constant_MVAR;
                %***** Updating the responsive bus loads *****%
                Generator_index = size(obj.mpc.gen,1) + 1;
                obj.mpc.genfuel(Generator_index,:) = obj.mpc.genfuel(1,:);  %copy random genfuel entry
@@ -226,8 +251,8 @@ classdef MATPOWERWrapper
                Bus_number = obj.config_data.cosimulation_bus(length(obj.config_data.cosimulation_bus)-i+1,1);
                Generator_index = size(obj.mpc.gen,1);
                solution.bus(Bus_number,3) = solution.bus(Bus_number,3) - solution.gen(Generator_index,2);
-               obj.RT_allocations{Bus_number}.P_clear =  obj.mpc.bus(Bus_number,14); 
-               obj.RT_allocations{Bus_number}.Q_clear =  obj.mpc.bus(Bus_number,3); 
+               obj.RTM_allocations{Bus_number}.P_clear =  obj.mpc.bus(Bus_number,14); 
+               obj.RTM_allocations{Bus_number}.Q_clear =  obj.mpc.bus(Bus_number,3); 
                
                obj.mpc.genfuel(Generator_index,:) = [];
                obj.mpc.gen(Generator_index,:) = [];
@@ -264,8 +289,8 @@ classdef MATPOWERWrapper
            obj.config_data.helics_config.publications = [];
            obj.config_data.helics_config.subscriptions = [];
 
-            for i = 1:length(obj.config_data.cosimulation_bus)
-                cosim_bus = obj.config_data.cosimulation_bus(i);
+            for i = 1:length(obj.config_data.physics_powerflow.cosimulation_bus)
+                cosim_bus = obj.config_data.physics_powerflow.cosimulation_bus(i);
                 %%%%%%%%%%%%%%%%% Creating Pubs & Subs for physics_powerflow %%%%%%%%%%%%%%%%%
                 if obj.config_data.include_physics_powerflow
                     publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.pnv');
@@ -278,7 +303,11 @@ classdef MATPOWERWrapper
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
-                %%%%%%%%%%%%%%%%% Creating Pubs & Subs for real time market %%%%%%%%%%%%%%%%%%    
+            end
+                        
+            %%%%%%%%%%%%%%%%% Creating Pubs & Subs for real time market %%%%%%%%%%%%%%%%%%  
+            for i = 1:length(obj.config_data.real_time_market.cosimulation_bus) 
+                cosim_bus = obj.config_data.real_time_market.cosimulation_bus(i);
                 if obj.config_data.include_real_time_market
                     publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.rt_energy.cleared');
                     publication.type =   "JSON";
@@ -290,7 +319,11 @@ classdef MATPOWERWrapper
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
+            end
+            
                 %%%%%%%%%%%%%%%%% Creating Pubs & Subs for day ahead market %%%%%%%%%%%%%%%%%% 
+            for i = 1:length(obj.config_data.day_ahead_market.cosimulation_bus) 
+                cosim_bus = obj.config_data.day_ahead_market.cosimulation_bus(i);
                 if obj.config_data.include_day_ahead_market
                     publication.key =   strcat (obj.config_data.helics_config.name, '.pcc.', mat2str(cosim_bus), '.da_energy.cleared');
                     publication.type =   "JSON";
@@ -389,7 +422,7 @@ classdef MATPOWERWrapper
        end
             
        %% Get Bids from Cosimulation
-       function obj = get_bids_from_helics(obj)
+       function obj = get_RTM_bids_from_helics(obj)
            %% Importing the HELICS Libraries %%
            if obj.octave
                helics; 
@@ -406,12 +439,12 @@ classdef MATPOWERWrapper
                
                DSO_bid = jsondecode(raw_bid);
                fprintf('Wrapper: Got bids from Cosim bus %d\n', cosim_bus);
-               obj.RT_bids{cosim_bus} = DSO_bid;
+               obj.RTM_bids{cosim_bus} = DSO_bid;
            end
        end
        
         %% Send Allocations to Cosimulation 
-       function obj = send_allocations_to_helics(obj)
+       function obj = send_RTM_allocations_to_helics(obj)
            %% Importing the HELICS Libraries %%
            if obj.octave
                helics; 
@@ -425,14 +458,14 @@ classdef MATPOWERWrapper
                pubkey_idx = find(~cellfun(@isempty,temp));
                pub_object = helicsFederateGetPublication(obj.helics_data.fed, obj.helics_data.pub_keys{pubkey_idx});
                 
-               raw_allocation = jsonencode (obj.RT_allocations{cosim_bus});
+               raw_allocation = jsonencode (obj.RTM_allocations{cosim_bus});
                helicsPublicationPublishString(pub_object, raw_allocation);
                fprintf('Wrapper: Send Cleared Values to Cosim bus %d\n', cosim_bus);
             end    
        end
        
        
-       %% Loading and Storing profiles in the Wrapper Clasess%% 
+       %% Creating DA Forecast from profiles in the Wrapper Clasess%% 
        function obj = get_DA_forecast(obj, input_fieldname, current_time, interval)
            
            profile = obj.profiles.(input_fieldname);
@@ -445,6 +478,10 @@ classdef MATPOWERWrapper
            DA_forecast= [];
            for idx = 2: size(profile, 2)
                [DA_forecast(:,idx), forecast_intervals] = interpolate_profile_to_interval(daily_profile(:,idx), input_resolution, 3600, interval);
+               %% Ensuring Non-negative generation from Interpolation Results
+               if contains(input_fieldname,'wind') || contains(input_fieldname,'solar')
+                   DA_forecast(:,idx) = max(DA_forecast(:,idx),0);
+               end
            end
            DA_forecast(:,1) = forecast_intervals;
            obj.forecast.(input_fieldname) = DA_forecast(2:end,:);
