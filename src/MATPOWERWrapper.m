@@ -236,7 +236,14 @@ classdef MATPOWERWrapper
            success = 0; tries = 0 ; 
            while success < 1 && tries < 5
                mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
-               solution = rundcopf(obj.mpc, mpoptOPF); 
+               mpc_mod = struct();
+               mpc_mod.bus = obj.mpc.bus;
+               mpc_mod.gen = obj.mpc.gen;
+               mpc_mod.gencost = obj.mpc.gencost;
+               mpc_mod.branch = obj.mpc.branch;
+               mpc_mod.baseMVA = obj.mpc.baseMVA;
+               mpc_mod.genfuel = obj.mpc.genfuel;
+               solution = rundcopf(mpc_mod, mpoptOPF); 
                success = solution.success;
                tries = tries + 1;
                %***** Updating the Line Limits *****%
