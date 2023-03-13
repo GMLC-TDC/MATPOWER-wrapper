@@ -37,7 +37,7 @@ time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
 
 %% Updating the FLow Limits %%
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 0.75);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 3);
 Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
 
@@ -45,7 +45,7 @@ Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the 
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*1/100; 
+zonal_res_req = max_zonal_loads'*2/100; 
 % assuming Non VRE generators to participate in reserve allocations
 reserve_genId = [1:33];
 % assuming 5% reserve availiability from all generators
@@ -53,7 +53,7 @@ reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 4/100;
 % assuming constant price for reserves from all generators
 reserve_genP = 1*ones(length(reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
-Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
+% Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 10;
@@ -64,9 +64,9 @@ flex_profile = flex_max*ones(24, 1)/100;
 
 %% ISO Simulator Starts here
 while time_granted < Wrapper.duration
-
+      next_helics_time = Wrapper.duration;
      if Wrapper.config_data.include_day_ahead_market
-         next_helics_time = min([tnext_day_ahead_market, Wrapper.duration]);
+         next_helics_time = min([tnext_day_ahead_market, next_helics_time]);
      end
      if Wrapper.config_data.include_real_time_market
          next_helics_time = min([tnext_real_time_market, next_helics_time]);
@@ -109,41 +109,6 @@ while time_granted < Wrapper.duration
         end
 
         tnext_physics_powerflow = tnext_physics_powerflow + Wrapper.config_data.physics_powerflow.interval;
-    end
-    
-    %% *************************************************************
-    %% Running Real Time Energy Imbalance Market
-    %% *************************************************************    
-    if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
-            time_granted;
-            Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
-            Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
-            
-            hod = hour(current_time)+1;
-            % Collect Bids from DSO
-            if Wrapper.config_data.include_helics
-                Wrapper = Wrapper.get_RTM_bids_from_helics();
-            else
-                Wrapper = Wrapper.get_RTM_bids_from_wrapper(time_granted, flex_profile(hod), price_range, bid_blocks);
-            end
-            if Wrapper.config_data.include_day_ahead_market
-                hour_idx = floor((time_granted)/3600) + 1;
-                Wrapper.mpc.gen(:,8) = transpose(Wrapper.results.DAM.UC(hour_idx,2:(size(Wrapper.mpc.gen,1)+1)));
-                % Wrapper.mpc.gen(:,8) = ones(size(Wrapper.mpc.gen,1),1);
-            end
-            
-            fprintf('Wrapper: Running RT Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
-            %***********************************************************%
-            Wrapper = Wrapper.run_RT_market(time_granted);
-            %***********************************************************%
-            
-            %***********************************************************%
-            % Collect Allocations from DSO
-            if Wrapper.config_data.include_helics
-                Wrapper = Wrapper.send_RTM_allocations_to_helics();
-            end
-            
-            tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
     end
     
     %% *************************************************************
@@ -303,6 +268,8 @@ while time_granted < Wrapper.duration
         % mpc_mod = rundcopf(mpc_mod);
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
+        must_run_idx = [75, 76];
+        xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         xgd.PositiveLoadFollowReserveQuantity =  mpc_mod.gen(:,17)*60;
         xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generators
@@ -319,14 +286,14 @@ while time_granted < Wrapper.duration
         nt = size(profiles(1).values, 1);
         mdi = loadmd(mpc_mod, nt, xgd, [], [], profiles);
         
-        for t = 1:nt
-            mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
-        end
+%         for t = 1:nt
+%             mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
+%         end
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 0);
-        mpopt = mpoption(mpopt, 'most.uc.run', 1);
+        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
+        mpopt = mpoption(mpopt, 'most.uc.run', 0);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
@@ -374,7 +341,42 @@ while time_granted < Wrapper.duration
 
         tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
     end
-
+    
+    
+    %% *************************************************************
+    %% Running Real Time Energy Imbalance Market
+    %% *************************************************************    
+    if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market)
+            time_granted;
+            Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
+            Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
+            
+            hod = hour(current_time)+1;
+            % Collect Bids from DSO
+            if Wrapper.config_data.include_helics
+                Wrapper = Wrapper.get_RTM_bids_from_helics();
+            else
+                Wrapper = Wrapper.get_RTM_bids_from_wrapper(time_granted, flex_profile(hod), price_range, bid_blocks);
+            end
+            if Wrapper.config_data.include_day_ahead_market
+                hour_idx = floor((time_granted)/3600) + 1;
+                Wrapper.mpc.gen(:,8) = transpose(Wrapper.results.DAM.UC(hour_idx,2:(size(Wrapper.mpc.gen,1)+1)));
+                % Wrapper.mpc.gen(:,8) = ones(size(Wrapper.mpc.gen,1),1);
+            end
+            
+            fprintf('Wrapper: Running RT Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+            %***********************************************************%
+            Wrapper = Wrapper.run_RT_market(time_granted);
+            %***********************************************************%
+            
+            %***********************************************************%
+            % Collect Allocations from DSO
+            if Wrapper.config_data.include_helics
+                Wrapper = Wrapper.send_RTM_allocations_to_helics();
+            end
+            
+            tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
+    end
 end
 
 Wrapper.write_results(case_name)
