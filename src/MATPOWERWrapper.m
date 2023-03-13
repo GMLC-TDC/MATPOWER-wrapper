@@ -248,7 +248,7 @@ classdef MATPOWERWrapper
                tries = tries + 1;
                %***** Updating the Line Limits *****%
                if success == 0
-                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with 10% more line limits \n',tries);
+                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with 10 Percent more line limits \n',tries);
                    obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)*1.1;
                end
            end

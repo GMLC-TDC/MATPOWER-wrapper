@@ -22,8 +22,8 @@
 		}
  	},
   "results_files": "../results/", 
-  "start_time": "2016-08-05 00:00:00", 
-  "end_time": "2016-08-07 00:00:00", 
+  "start_time": "2016-08-12 00:00:00", 
+  "end_time": "2016-08-14 00:00:00", 
   "include_contingencies": false, 
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
