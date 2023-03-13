@@ -35,7 +35,26 @@ tnext_day_ahead_market = 0;
 
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
-    
+
+%% Updating the FLow Limits %%
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 0.75);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 3);
+Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
+
+%% Adding Zonal Reserves %%
+res_zones = Wrapper.mpc.bus(:, 11);
+max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
+% Assuming reserve requirement to be 2 % of peak load
+zonal_res_req = max_zonal_loads'*1/100; 
+% assuming Non VRE generators to participate in reserve allocations
+reserve_genId = [1:33];
+% assuming 5% reserve availiability from all generators
+reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 4/100; 
+% assuming constant price for reserves from all generators
+reserve_genP = 1*ones(length(reserve_genId), 1);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
+Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
+
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 10;
 price_range = [10, 50];
@@ -46,18 +65,28 @@ flex_profile = flex_max*ones(24, 1)/100;
 %% ISO Simulator Starts here
 while time_granted < Wrapper.duration
 
+     if Wrapper.config_data.include_day_ahead_market
+         next_helics_time = min([tnext_day_ahead_market, Wrapper.duration]);
+     end
+     if Wrapper.config_data.include_real_time_market
+         next_helics_time = min([tnext_real_time_market, next_helics_time]);
+     end
+     if Wrapper.config_data.include_physics_powerflow
+         next_helics_time = min([tnext_physics_powerflow, next_helics_time]);
+     end
+     
     % next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
-    next_helics_time =  min([tnext_day_ahead_market]);
+    % next_helics_time =  min([tnext_day_ahead_market]);
 
     if Wrapper.config_data.include_helics
         time_granted  = helicsFederateRequestTime(Wrapper.helics_data.fed, next_helics_time);
         % fprintf('Wrapper: Requested  %ds in time and got Granted %d\n', next_helics_time, time_granted)
-        fprintf('Wrapper: Current Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
     else
         time_granted = next_helics_time;
-        fprintf('Wrapper: Current Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
     end
     
+    current_time = (datetime(Wrapper.config_data.start_time) + seconds(time_granted));
+    fprintf('Wrapper: Current Time %s\n', current_time)
     %% *************************************************************
     %% Running Physics based Power Flow
     %% *************************************************************
@@ -69,6 +98,8 @@ while time_granted < Wrapper.duration
         if Wrapper.config_data.include_helics  
             Wrapper = Wrapper.get_loads_from_helics();
         end
+        
+        fprintf('Wrapper: Running Power Flow at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
         %*************************************************************
         Wrapper = Wrapper.run_power_flow(time_granted);  
         %*************************************************************
@@ -88,13 +119,20 @@ while time_granted < Wrapper.duration
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             
+            hod = hour(current_time)+1;
             % Collect Bids from DSO
             if Wrapper.config_data.include_helics
                 Wrapper = Wrapper.get_RTM_bids_from_helics();
             else
-                Wrapper = Wrapper.get_RTM_bids_from_wrapper(time_granted, flexibility, price_range, bid_blocks);
+                Wrapper = Wrapper.get_RTM_bids_from_wrapper(time_granted, flex_profile(hod), price_range, bid_blocks);
+            end
+            if Wrapper.config_data.include_day_ahead_market
+                hour_idx = floor((time_granted)/3600) + 1;
+                Wrapper.mpc.gen(:,8) = transpose(Wrapper.results.DAM.UC(hour_idx,2:(size(Wrapper.mpc.gen,1)+1)));
+                % Wrapper.mpc.gen(:,8) = ones(size(Wrapper.mpc.gen,1),1);
             end
             
+            fprintf('Wrapper: Running RT Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
             %***********************************************************%
             Wrapper = Wrapper.run_RT_market(time_granted);
             %***********************************************************%
@@ -207,7 +245,7 @@ while time_granted < Wrapper.duration
             mpc_mod.gen(Generator_index,10) = -10000; %min generation - Large Number
             mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
             mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
-            
+
             %%% Adding the profiles for Dispatchable Load %%%
             
             DSO_DAM_UNRES_MW_profile = create_dam_profile(DSO_DAM_bid.constant_MW, bus_number, 1, CT_TBUS, PD);
@@ -260,30 +298,41 @@ while time_granted < Wrapper.duration
         mpc_mod.gen(:, 18) = mpc_mod.gen(:,17)*60;
         mpc_mod.gen(:, 19) = mpc_mod.gen(:,17)*60;
         mpc_mod.gen(77:end, 18:20) = 10000;
-        mpc_mod.branch(:,6:8) = mpc_mod.branch(:,6:8)*0.5;
-        mpc_mod.branch(7,6:8) = mpc_mod.branch(7,6:8)*3;
-        
+        % mpc_mod.branch(:,6:8) = mpc_mod.branch(:,6:8)*0.5;
+        % mpc_mod.branch(7,6:8) = mpc_mod.branch(7,6:8)*3;
+        % mpc_mod = rundcopf(mpc_mod);
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
-        xgd_table.data(end) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         xgd.PositiveLoadFollowReserveQuantity =  mpc_mod.gen(:,17)*60;
-        xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000;
+        xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generators
         xgd.NegativeLoadFollowReserveQuantity = xgd.PositiveLoadFollowReserveQuantity;
 
-
+        %% Adding Ramping Constraints for dispatchable loads  %%
+        for i = length(Wrapper.config_data.day_ahead_market.cosimulation_bus):-1:1
+            dis_load_idx = size(mpc_mod.gen,1)-(i-1);
+            xgd.CommitKey(dis_load_idx) = 2;
+            xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = 20000;
+            xgd.NegativeLoadFollowReserveQuantity(dis_load_idx) = 20000;
+        end
         %% Solving DAM %%
         nt = size(profiles(1).values, 1);
         mdi = loadmd(mpc_mod, nt, xgd, [], [], profiles);
+        
+        for t = 1:nt
+            mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
+        end
+        
+        fprintf('Wrapper: Running DA Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
+        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 0);
         mpopt = mpoption(mpopt, 'most.uc.run', 1);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
         if mdo.results.success == 1
             ms        = most_summary(mdo);
-            curr_day  = floor(time_granted/86400)+1;
+            curr_day  = floor(time_granted/86400);
             DAM_start = curr_day* 86400 + 3600; % results for first hour
             DAM_end   = curr_day* 86400 + 86400; % results for last hour
             DAM_time  = linspace(DAM_start, DAM_end, 24)'; 
@@ -325,8 +374,6 @@ while time_granted < Wrapper.duration
 
         tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
     end
-    
-    
 
 end
 

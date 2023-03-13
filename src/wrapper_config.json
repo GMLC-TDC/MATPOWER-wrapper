@@ -23,14 +23,14 @@
  	},
   "results_files": "../results/", 
   "start_time": "2016-08-05 00:00:00", 
-  "end_time": "2016-08-06 00:00:00", 
+  "end_time": "2016-08-07 00:00:00", 
   "include_contingencies": false, 
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
   "include_reserve_requirements": false,
   "include_line_limits": true,
   "include_physics_powerflow": false,
-  "include_real_time_market": false, 
+  "include_real_time_market": true, 
   "include_day_ahead_market": true, 
   "include_helics": false, 
   "physics_powerflow":{
@@ -41,7 +41,7 @@
   "real_time_market": {
     "type": "DC",
     "interval": 300, 
-    "cosimulation_bus": [3],
+    "cosimulation_bus": [2],
     "transactive": true,
 	"bid_model": "polynomial"
   }, 

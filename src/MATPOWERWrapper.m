@@ -46,9 +46,13 @@ classdef MATPOWERWrapper
                obj.RTM_bids =  cell(length(obj.mpc.bus(:,3)),1);
                obj.RTM_allocations =  cell(length(obj.mpc.bus(:,3)),1);
            end
-           
        end
        
+       %% Loading the updated model in the Wrapper Clasess%% 
+       function obj = update_model(obj)
+           obj.mpc = obj.MATPOWERModifier.MATPOWERModel;
+       end
+           
        %% Loading and Storing profiles in the Wrapper Clasess%% 
        function obj = read_profiles(obj, input_fieldname, output_fieldname)
            
@@ -118,7 +122,7 @@ classdef MATPOWERWrapper
        %% Temporary testing functions for RTM bidding%% 
        function obj = get_RTM_bids_from_wrapper(obj, time, flexibility, price_range, blocks)        
             %   Get Flex and Inflex loads   %
-            cosim_buses = obj.config_data.day_ahead_market.cosimulation_bus;
+            cosim_buses = obj.config_data.real_time_market.cosimulation_bus;
             for i = 1:length(cosim_buses)
                 cosim_bus = cosim_buses(i);
                 profile = obj.profiles.('load_profile');
@@ -185,8 +189,8 @@ classdef MATPOWERWrapper
        function obj = run_RT_market(obj, time)
            
            %************* Wrapper.update_dispatchable_loads(bids)*************
-           for i = 1 : length(obj.config_data.cosimulation_bus)
-               Bus_number = obj.config_data.cosimulation_bus(i,1);
+           for i = 1 : length(obj.config_data.real_time_market.cosimulation_bus)
+               Bus_number = obj.config_data.real_time_market.cosimulation_bus(i,1);
                DSO_bid = obj.RTM_bids{Bus_number};
                Actual_cost = zeros(length(DSO_bid.Q_bid),1);
                for k = 1:length(DSO_bid.Q_bid)
@@ -213,7 +217,7 @@ classdef MATPOWERWrapper
                obj.mpc.gen(Generator_index,10) = -1*max(DSO_bid.Q_bid);        %Set reduction range
                %***** Updating the responsive bus costs *****%
                obj.mpc.gencost(Generator_index,:) = 0;                         %new entry of 0's
-               if strfind(obj.config_data.real_time_market.bid_model,"Poly")
+               if strfind(obj.config_data.real_time_market.bid_model,"poly")
                    obj.mpc.gencost(Generator_index,1) = 2;                  %Polynomial model
                    obj.mpc.gencost(Generator_index,4) = 3;                  %Degree 3 polynomial
                    obj.mpc.gencost(Generator_index,5:7) = Coeff;            %Polynomial coefficients
@@ -228,7 +232,7 @@ classdef MATPOWERWrapper
                    end
                end
            end
-            
+           
            success = 0; tries = 0 ; 
            while success < 1 && tries < 5
                mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
@@ -237,7 +241,7 @@ classdef MATPOWERWrapper
                tries = tries + 1;
                %***** Updating the Line Limits *****%
                if success == 0
-                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with 10 Percent. more line limits\n',tries);
+                   fprintf('Wrapper: RT OPF Failed on attempt %d, Trying again with 10% more line limits \n',tries);
                    obj.mpc.branch(:,6:8) = obj.mpc.branch(:,6:8)*1.1;
                end
            end
@@ -247,8 +251,8 @@ classdef MATPOWERWrapper
            end
            
            %************* Wrapper.updating Allocations (bids)*************%
-           for i = 1 : length(obj.config_data.cosimulation_bus)
-               Bus_number = obj.config_data.cosimulation_bus(length(obj.config_data.cosimulation_bus)-i+1,1);
+           for i = 1 : length(obj.config_data.real_time_market.cosimulation_bus)
+               Bus_number = obj.config_data.real_time_market.cosimulation_bus(length(obj.config_data.real_time_market.cosimulation_bus)-i+1,1);
                Generator_index = size(obj.mpc.gen,1);
                solution.bus(Bus_number,3) = solution.bus(Bus_number,3) - solution.gen(Generator_index,2);
                obj.RTM_allocations{Bus_number}.P_clear =  obj.mpc.bus(Bus_number,14); 
@@ -260,7 +264,6 @@ classdef MATPOWERWrapper
                solution.genfuel(Generator_index,:) = [];
                solution.gen(Generator_index,:) = [];
                solution.gencost(Generator_index,:) = [];
-      
            end
            
            %************* Wrapper.Saving Results*************%
@@ -277,7 +280,8 @@ classdef MATPOWERWrapper
                    obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
                end
            else
-               failed;    
+               fprintf('Wrapper: RTM Market failed at Time %s\n', (time));
+%                failed
            end
        end
        
