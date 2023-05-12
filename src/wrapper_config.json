@@ -3,7 +3,7 @@
     "datapath": "../system_data/ERCOT/",
     "case_name": "ERCOT_8_system.json",
     "load_profile_info": {
-      "filename": "2016_ERCOT_8_system_5min_Load_Data.csv",
+      "filename": "2016_ERCOT_8_system_5min_load_data.csv",
       "resolution": 300,
       "starting_time": "2016-01-01 00:00:00",
       "data_map": {
@@ -12,7 +12,7 @@
       }
     },
     "wind_profile_info": {
-    	"filename": "2016_ERCOT_5min_Wind_Data.csv",
+    	"filename": "2016_ERCOT_5min_wind_data.csv",
     	"resolution": 300,
     	"starting_time": "2016-01-01 00:00:00",
 		"data_map": {
@@ -30,7 +30,7 @@
   "include_reserve_requirements": false,
   "include_line_limits": true,
   "include_physics_powerflow": false,
-  "include_real_time_market": true, 
+  "include_real_time_market": false, 
   "include_day_ahead_market": true, 
   "include_helics": false, 
   "physics_powerflow":{

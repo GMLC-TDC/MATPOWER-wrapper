@@ -79,6 +79,14 @@ classdef MATPOWERWrapper
                 The simulation duration is a subset of the duration of the data.  
                 If else, The user is expected to adjust the start/end dates or the profile. 
            %}
+           
+           if exist('OCTAVE_VERSION', 'builtin') ~= 0
+              base_path = pwd;
+              data_path_short = data_path(3:end);
+              input_file_name = strcat(base_path,data_path_short,profile_info.filename);
+              
+           endif
+
            data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column]);    
            for idx = 1: length(profile_info.data_map.columns)
                data_idx = profile_info.data_map.columns(idx);
@@ -480,7 +488,7 @@ classdef MATPOWERWrapper
        function obj = get_DA_forecast(obj, input_fieldname, current_time, interval)
            
            profile = obj.profiles.(input_fieldname);
-           
+           isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
            start_idx = find(current_time == profile(:,1));
            end_idx   = find(current_time+interval == profile(:,1));
            daily_profile = profile(start_idx:end_idx,:);
@@ -490,9 +498,16 @@ classdef MATPOWERWrapper
            for idx = 2: size(profile, 2)
                [DA_forecast(:,idx), forecast_intervals] = interpolate_profile_to_interval(daily_profile(:,idx), input_resolution, 3600, interval);
                %% Ensuring Non-negative generation from Interpolation Results
-               if contains(input_fieldname,'wind') || contains(input_fieldname,'solar')
-                   DA_forecast(:,idx) = max(DA_forecast(:,idx),0);
+               if ~isOctave
+                 if contains(input_fieldname,'wind') || contains(input_fieldname,'solar')
+                     DA_forecast(:,idx) = max(DA_forecast(:,idx),0);
+                 end
+               else
+                 if basic_contains(input_fieldname,'wind') || basic_contains(input_fieldname,'solar')
+                     DA_forecast(:,idx) = max(DA_forecast(:,idx),0);
+                 end
                end
+               
            end
            DA_forecast(:,1) = forecast_intervals;
            obj.forecast.(input_fieldname) = DA_forecast(2:end,:);

@@ -5,6 +5,7 @@ warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
 case_name = 'Poly10';
 
+
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
@@ -12,8 +13,10 @@ wrapper_startup;
 Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 
 %% Read profile and save it within a strcuture called load
+src_dir = prev_dir();
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
+cd(src_dir);
 
 if Wrapper.config_data.include_helics
 
@@ -59,7 +62,9 @@ Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc st
 bid_blocks = 10;
 price_range = [10, 50];
 flex_max = 10; % Defines maximum flexibility as a % of total load
-flex_profile = unifrnd(0,flex_max,[24,1])/100;
+if ~isOctave
+  flex_profile = unifrnd(0,flex_max,[24,1])/100;
+endif
 flex_profile = flex_max*ones(24, 1)/100;
 
 %% ISO Simulator Starts here
@@ -85,8 +90,8 @@ while time_granted < Wrapper.duration
     else
         time_granted = next_helics_time;
     end
-    
-    current_time = (datetime(Wrapper.config_data.start_time) + seconds(time_granted));
+
+    current_time = datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400));
     fprintf('Wrapper: Current Time %s\n', current_time)
     %% *************************************************************
     %% Running Physics based Power Flow
@@ -118,7 +123,8 @@ while time_granted < Wrapper.duration
     
     if (time_granted >= tnext_day_ahead_market) && (Wrapper.config_data.include_day_ahead_market) && (time_granted < Wrapper.duration)
 %         fprintf('Wrapper: Current Time %s\n', (datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
-        fprintf('Wrapper: DA forecast at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+%         fprintf('Wrapper: DA forecast at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+        fprintf('Wrapper: DA forecast at Time %s\n', datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400)))
         Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         
@@ -192,7 +198,7 @@ while time_granted < Wrapper.duration
                        Actual_cost(k) = Actual_cost(k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
                    end
                 end 
-                DSO_DAM_Bid_Coeff(t,1:3) = polyfit(-1*DSO_DAM_bid.Q_bid(t,:), -1*Actual_cost, 2);
+                DSO_DAM_Bid_Coeff(t,1:3) = polyfit(-1*transpose(DSO_DAM_bid.Q_bid(t,:)), -1*Actual_cost, 2);
                 DSO_DAM_RES_MAX= -1*max(DSO_DAM_bid.Q_bid, [], 2);
             end
             % DAM_Bid_Coeff{bus_number} = DSO_DAM_bid_Coeff;
@@ -296,10 +302,11 @@ while time_granted < Wrapper.duration
             mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
         end
         
-        fprintf('Wrapper: Running DA Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+        fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
         mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
-        mpopt = mpoption(mpopt, 'most.uc.run', 1);
+        mpopt.mips.max_it = 200;
+        mpopt = mpoption(mpopt, 'most.uc.run', 0);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
