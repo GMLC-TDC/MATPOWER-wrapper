@@ -14,13 +14,12 @@ Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 
 %% Read profile and save it within a strcuture called load
 if isOctave
-    src_dir = prev_dir();
+src_dir = prev_dir();
 end
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
-if isOctave
-    cd(src_dir);
-end
+if is
+cd(src_dir);
 
 if Wrapper.config_data.include_helics
 

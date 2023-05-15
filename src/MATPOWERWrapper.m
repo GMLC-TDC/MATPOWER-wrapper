@@ -85,7 +85,7 @@ classdef MATPOWERWrapper
               data_path_short = data_path(3:end);
               input_file_name = strcat(base_path,data_path_short,profile_info.filename);
               
-           endif
+           end
 
            data  = dlmread(input_file_name, ',', [start_data_point+1, 0, end_data_point+1, end_column]);    
            for idx = 1: length(profile_info.data_map.columns)
