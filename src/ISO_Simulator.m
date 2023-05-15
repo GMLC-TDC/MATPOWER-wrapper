@@ -61,7 +61,7 @@ Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc st
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 10;
 price_range = [10, 50];
-flex_max = 10; % Defines maximum flexibility as a % of total load
+flex_max = 20; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
 endif
@@ -105,7 +105,7 @@ while time_granted < Wrapper.duration
             Wrapper = Wrapper.get_loads_from_helics();
         end
         
-        fprintf('Wrapper: Running Power Flow at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+        fprintf('Wrapper: Running Power Flow at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         %*************************************************************
         Wrapper = Wrapper.run_power_flow(time_granted);  
         %*************************************************************
@@ -365,7 +365,11 @@ while time_granted < Wrapper.duration
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             
-            hod = hour(current_time)+1;
+            if isOctave
+              hod = floor(24 * (datenum(current_time) - floor(datenum(current_time)))) + 1;
+            else
+              hod = hour(current_time)+1;
+            end
             % Collect Bids from DSO
             if Wrapper.config_data.include_helics
                 Wrapper = Wrapper.get_RTM_bids_from_helics();
@@ -378,7 +382,7 @@ while time_granted < Wrapper.duration
                 % Wrapper.mpc.gen(:,8) = ones(size(Wrapper.mpc.gen,1),1);
             end
             
-            fprintf('Wrapper: Running RT Market at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
+            fprintf('Wrapper: Running RT Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
             %***********************************************************%
             Wrapper = Wrapper.run_RT_market(time_granted);
             %***********************************************************%

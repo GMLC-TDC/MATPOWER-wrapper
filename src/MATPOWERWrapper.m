@@ -209,7 +209,7 @@ classdef MATPOWERWrapper
                    end
                end  
 
-               Coeff = polyfit(-1*DSO_bid.Q_bid, -1*Actual_cost, 2);
+               Coeff = polyfit(-1*transpose(DSO_bid.Q_bid), -1*Actual_cost, 2);
                %***** Updating the unresponsive bus loads *****%
                obj.mpc.bus(Bus_number,3) = DSO_bid.constant_MW; 
                obj.mpc.bus(Bus_number,4) = DSO_bid.constant_MVAR; 
@@ -526,7 +526,11 @@ classdef MATPOWERWrapper
                names = fieldnames(obj.results.RTM);
                for idx = 1:length(names)
                    file_name = strcat('../outputs/',case_name,'_RTM_',names{idx},'.csv');
-                   writematrix(obj.results.RTM.(names{idx}), file_name);
+                   if exist('OCTAVE_VERSION', 'builtin') ~= 0
+                       csvwrite(file_name,obj.results.RTM.(names{idx}));
+                   else
+                       writematrix(obj.results.RTM.(names{idx}), file_name);
+                   end
                end          
            end
            
@@ -535,7 +539,11 @@ classdef MATPOWERWrapper
                names = fieldnames(obj.results.DAM);
                for idx = 1:length(names)
                    file_name = strcat('../outputs/',case_name,'_DAM_',names{idx},'.csv');
-                   writematrix(obj.results.DAM.(names{idx}), file_name);
+                   if exist('OCTAVE_VERSION', 'builtin') ~= 0
+                       csvwrite(file_name,obj.results.RTM.(names{idx}));
+                   else
+                       writematrix(obj.results.DAM.(names{idx}), file_name);
+                   end
                end          
            end
            
