@@ -51,14 +51,14 @@ Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
-max_zonal_loads =  [715590]; % Test Case Based on 2016 data
+max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
 zonal_res_req = max_zonal_loads'*1/100; 
 % assuming Non VRE generators to participate in reserve allocations
 reserve_genId = [1:33];
 reserve_genId = [1:13]; %% Test case
 % assuming 5% reserve availiability from all generators
-reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 10/100; 
+reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 5/100; 
 % assuming constant price for reserves from all generators
 reserve_genP = 1*ones(length(reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
@@ -311,9 +311,9 @@ while time_granted < Wrapper.duration
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
+        mpopt = mpoption('verbose', 0, 'out.all', 0, 'most.dc_model', 1);
         mpopt.mips.max_it = 200;
-        mpopt = mpoption(mpopt, 'most.uc.run', 0);
+        mpopt = mpoption(mpopt, 'most.uc.run', 1);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
