@@ -1,0 +1,64 @@
+{
+  "matpower_most_data": {
+    "datapath": "../system_data/test_system/",
+    "case_name": "test_damcase.m",
+    "load_profile_info": {
+      "filename": "2016_test_5min_load_data.csv",
+      "resolution": 300,
+      "starting_time": "2016-01-01 00:00:00",
+      "data_map": {
+        "columns": [2, 3, 4, 5, 6, 7, 8, 9],
+        "bus": [1, 2, 3, 4, 5, 6, 7, 8]
+      }
+    },
+    "wind_profile_info": {
+    	"filename": "2016_test_5min_wind_data.csv",
+    	"resolution": 300,
+    	"starting_time": "2016-01-01 00:00:00",
+		"data_map": {
+			"columns": [2, 3, 4, 5, 6], 
+    		"gen": [14, 15, 16, 17, 18]
+			}
+		}
+ 	},
+  "results_files": "../results/", 
+  "start_time": "2016-08-12 00:00:00", 
+  "end_time": "2016-08-14 00:00:00", 
+  "include_contingencies": false, 
+  "include_renewable_uncertainty": false,
+  "include_load_uncertainty": false,
+  "include_reserve_requirements": false,
+  "include_line_limits": true,
+  "include_physics_powerflow": false,
+  "include_real_time_market": false, 
+  "include_day_ahead_market": true, 
+  "include_helics": false, 
+  "physics_powerflow":{
+    "type": "DC",
+    "interval": 60,
+    "cosimulation_bus": [3]
+  },
+  "real_time_market": {
+    "type": "DC",
+    "interval": 300, 
+    "cosimulation_bus": [2],
+    "transactive": true,
+	"bid_model": "polynomial"
+  }, 
+  "day_ahead_market":{
+    "type": "DC",
+    "interval": 86400,
+    "cosimulation_bus": [2],
+    "forecast_error": 10,
+    "transactive": true
+  },
+  "helics_config": {
+    "coreType": "zmq",
+    "name": "TransmissionSim",
+    "period": 1,
+    "timeDelta": 0,
+    "logfile": "output.log",
+    "log_level": "warning",
+    "uninterruptible": true
+  }
+}

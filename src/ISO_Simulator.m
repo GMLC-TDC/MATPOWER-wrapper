@@ -10,7 +10,7 @@ case_name = 'Poly10';
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
 wrapper_startup;
-Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
+Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 
 %% Read profile and save it within a strcuture called load
 if isOctave
@@ -51,12 +51,14 @@ Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
+max_zonal_loads =  [715590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*2.5/100; 
+zonal_res_req = max_zonal_loads'*1/100; 
 % assuming Non VRE generators to participate in reserve allocations
 reserve_genId = [1:33];
+reserve_genId = [1:13]; %% Test case
 % assuming 5% reserve availiability from all generators
-reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 7.5/100; 
+reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 10/100; 
 % assuming constant price for reserves from all generators
 reserve_genP = 1*ones(length(reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
@@ -280,6 +282,7 @@ while time_granted < Wrapper.duration
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
         must_run_idx = [75:110]; %% Nuclear + VRE
+        must_run_idx = [10:18]; %% for Test case 
         xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         xgd.PositiveLoadFollowReserveQuantity =  mpc_mod.gen(:,17)*60;
