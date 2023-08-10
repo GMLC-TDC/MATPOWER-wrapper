@@ -92,6 +92,104 @@ Where:
 * *`<load metric file>`*  is the file to store the load metric data in.
 * *`<generation metric file>`* is the file to store the generation metric data in.
 
+# Wrapper Use Guide #
+
+## Files needed to get started ##
+1. json file of system data
+2. load data (likely as a .csv)
+   Each row of the file gives the number of seconds since the start of the data followed by entries for the load at each bus in MW
+3. Any other profile data used in the simulation (wind data will be used as an example)
+
+## Configuring the wrapper ##
+Here we will go through an example wrapper configuration file, explaining the various components.
+
+{\
+  "matpower_most_data": {\
+    "datapath": "../system_data/ERCOT/",\
+    "case_name": "ERCOT_8_system.json",\
+    "load_profile_info": {\
+      "filename": "2016_ERCOT_8_system_5min_load_data.csv",\
+      "resolution": 300,\
+      "starting_time": "2016-01-01 00:00:00",\
+      "data_map": {\
+        "columns": [2, 3, 4, 5, 6, 7, 8, 9],\
+        "bus": [1, 2, 3, 4, 5, 6, 7, 8]\
+      }\
+This first section sets up the location of the data and gives the file names for the system data and load data. The resolution refers to the time between data points in seconds, in this case 300 seconds, or 5 minutes between data points. The data map clarifies which columns of the load data refer to which buses. In this case, columns 2-9 in the load data refer to buses 1-8.
+      
+    },\
+    "wind_profile_info": {\
+    	"filename": "2016_ERCOT_5min_wind_data.csv",\
+    	"resolution": 300,\
+    	"starting_time": "2016-01-01 00:00:00",\
+		"data_map": {\
+			"columns": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35], \
+    		"gen": [77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]\
+			}\
+		}\
+ 	  },\
+
+The wind profile information here works much the same way, with the data map referring to individual generators. In this case, columns 2-35 in the data give the generation in MW for generators 77-110 as labeled in the system data.
+
+Here is where the simulation specifications begin.
+
+  Where to print results\
+  "results_files": "../results/", \
+  
+  What period of time should be simulated (this will simulate August 10-11 of 2016)\
+  "start_time": "2016-08-10 00:00:00", \
+  "end_time": "2016-08-12 00:00:00", \
+  
+  Here are a few settings for the simulation\
+  "include_contingencies": false, \
+  "include_renewable_uncertainty": false,\
+  "include_load_uncertainty": false,\
+  "include_reserve_requirements": false,\
+  "include_line_limits": true,\
+
+  Which components of the simulation should be included (These settings run both a day-ahead and real-time market, but do not run additional powerflow simulations)\
+  "include_physics_powerflow": false,\
+  "include_real_time_market": true, \
+  "include_day_ahead_market": true, \
+
+  Here you set wether to use the cosimulation platform HELICS or to provide all necessairy data locally\
+  "include_helics": false, \
+
+  These are the settings for the various components, where type determines the power flow model used, interval determines how often each component is run in seconds. In this case, the power flow is set to run every minute, the day-ahead market runs every 5 minutes, and the day-ahead market runs once per day. The cosimulation bus setting refers to which bus(es) may have a flexible load and the bid model setting refers to the way in which the generator costs are input to the gencost data (see MatPower manual)\
+  "physics_powerflow":{\
+    "type": "DC",\
+    "interval": 60,\
+    "cosimulation_bus": [2]\
+  },\
+  "real_time_market": {\
+    "type": "DC",\
+    "interval": 300, \
+    "cosimulation_bus": [2],\
+    "transactive": true,\
+	"bid_model": "poly"\
+  }, \
+  "day_ahead_market":{\
+    "type": "DC",\
+    "interval": 86400,\
+    "cosimulation_bus": [2],\
+    "forecast_error": 10,\
+    "transactive": true\
+  },\
+
+  Here is where the cosimulation settings are given.\
+  "helics_config": {\
+    "coreType": "zmq",\
+    "name": "TransmissionSim",\
+    "period": 1,\
+    "timeDelta": 0,\
+    "logfile": "output.log",\
+    "log_level": "warning",\
+    "uninterruptible": true\
+  }\
+}\
+
+This concludes the wrapper configuration file.
+
 ## References ##
 
 \[1\] R. D. Zimmerman, C. E. Murillo-Sanchez, and R. J. Thomas, "*MATPOWER: Steady-State Operations, Planning and Analysis Tools for Power Systems Research and Education*," Power Systems, IEEE Transactions on, vol. 26, no. 1, pp. 12-19, Feb. 2011. Paper can be found [here][link2MATPOWERpaper].
