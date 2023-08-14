@@ -94,6 +94,11 @@ Where:
 
 # Wrapper Use Guide #
 
+## Architecture Overview ##
+
+Cosimulation: 
+Features: 
+
 ## Files needed to get started ##
 1. json file of system data
 2. load data (likely as a .csv)
@@ -107,6 +112,11 @@ Here we will go through an example wrapper configuration file, explaining the va
   "matpower_most_data": {\
     "datapath": "../system_data/ERCOT/",\
     "case_name": "ERCOT_8_system.json",\
+    
+This first section sets up the location of the data and gives the file names for the system data and load data. The resolution refers to the time between data points in seconds, in this case 300 seconds, or 5 minutes between data points. The data map clarifies which columns of the load data refer to which buses. In this case, columns 2-9 in the load data refer to buses 1-8.
+
+Load Profile Information:
+
     "load_profile_info": {\
       "filename": "2016_ERCOT_8_system_5min_load_data.csv",\
       "resolution": 300,\
@@ -114,10 +124,10 @@ Here we will go through an example wrapper configuration file, explaining the va
       "data_map": {\
         "columns": [2, 3, 4, 5, 6, 7, 8, 9],\
         "bus": [1, 2, 3, 4, 5, 6, 7, 8]\
-      }\
-This first section sets up the location of the data and gives the file names for the system data and load data. The resolution refers to the time between data points in seconds, in this case 300 seconds, or 5 minutes between data points. The data map clarifies which columns of the load data refer to which buses. In this case, columns 2-9 in the load data refer to buses 1-8.
-      
-    },\
+      }\     
+
+Wind Profile Information: 
+
     "wind_profile_info": {\
     	"filename": "2016_ERCOT_5min_wind_data.csv",\
     	"resolution": 300,\
@@ -140,12 +150,14 @@ Here is where the simulation specifications begin.
   "start_time": "2016-08-10 00:00:00", \
   "end_time": "2016-08-12 00:00:00", \
   
-  Here are a few settings for the simulation\
-  "include_contingencies": false, \
-  "include_renewable_uncertainty": false,\
-  "include_load_uncertainty": false,\
-  "include_reserve_requirements": false,\
-  "include_line_limits": true,\
+  Here are a few settings for the simulation
+  Flags:
+  
+	"include_contingencies": false, \
+	"include_renewable_uncertainty": false,\
+	"include_load_uncertainty": false,\
+	"include_reserve_requirements": false,\
+	"include_line_limits": true,\
 
   Which components of the simulation should be included (These settings run both a day-ahead and real-time market, but do not run additional powerflow simulations)\
   "include_physics_powerflow": false,\
