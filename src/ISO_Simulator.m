@@ -3,9 +3,8 @@ clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
-case_name = 'Base';
-storage_option = 0;
-DAM_plot_option = 0;
+case_name = 'Poly10';
+
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
@@ -64,37 +63,13 @@ Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_g
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
-bid_blocks = 5;
-price_range = [25, 40];
-flex_max = 0; % Defines maximum flexibility as a % of total load
+bid_blocks = 10;
+price_range = [10, 50];
+flex_max = 20; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
 end
 flex_profile = flex_max*ones(24, 1)/100;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Mismatch runs %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-Mismatch = false;
-if Mismatch
-    flex_profile_DAM = zeros(24,1);
-else
-    flex_profile_DAM = flex_profile;
-end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-
-%%%%%%%%%%%%%%%%%%% Adding example storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-if storage_option
-    % storage_mpc = Wrapper.mpc;
-    % storage_struct = storage_100MWH(storage_mpc);
-    % [idx,storage_mpc] = addstorage(storage_struct,storage_mpc);
-    [storage_idx,Wrapper.mpc] = addstorage(storage_100MWH(Wrapper.mpc),Wrapper.mpc);
-    stor = storage_100MWH(Wrapper.mpc);
-    st_data = loadstoragedata(stor.sd_table);
-    st_data.UnitIdx = storage_idx;
-end
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% ISO Simulator Starts here
 while time_granted < Wrapper.duration
@@ -157,13 +132,6 @@ while time_granted < Wrapper.duration
         Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         
-        %% Clearing storage %%
-        if storage_option
-            Wrapper.mpc.gen(storage_idx,2) = stor.gen(2);
-            Wrapper.mpc.gen(storage_idx,9) = stor.gen(9);
-            Wrapper.mpc.gen(storage_idx,10) = stor.gen(10);
-        end
-
         %% Adding Generation Profiles from forecast for VRE-based Generators %%
         gen_info = Wrapper.config_data.matpower_most_data.('wind_profile_info');
         gen_idx = gen_info.data_map.gen;
@@ -196,7 +164,7 @@ while time_granted < Wrapper.duration
         if Wrapper.config_data.include_helics
                 Wrapper = Wrapper.get_DAM_bids_from_helics();
         else
-                Wrapper = Wrapper.get_DAM_bids_from_wrapper(time_granted, flex_profile_DAM, price_range, bid_blocks);
+                Wrapper = Wrapper.get_DAM_bids_from_wrapper(time_granted, flex_profile, price_range, bid_blocks);
         end
         
         %%%%%%%%%%%%%%% Add new profiles here %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -332,11 +300,7 @@ while time_granted < Wrapper.duration
 
         %% Solving DAM %%
         nt = size(profiles(1).values, 1);
-        if storage_option
-            mdi = loadmd(mpc_mod, nt, xgd, st_data, [], profiles);
-        else
-            mdi = loadmd(mpc_mod, nt, xgd, [], [], profiles);
-        end
+        mdi = loadmd(mpc_mod, nt, xgd, [], [], profiles);
         
         for t = 1:nt
             mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
@@ -377,41 +341,26 @@ while time_granted < Wrapper.duration
 %         mpc.gen(add_gen_index,:) = [];
 %         mpc.gencost(add_gen_index,:) = [];
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        if DAM_plot_option
-            time = linspace(1, nt, nt);
-            figure;
-            a=subplot(2,1,1);
-            set(a,'Units','normalized');
-            plot(time, ms.Pg, '-','LineWidth',1.5)
-            a=subplot(2,1,2);
-            set(a,'Units','normalized');
-            plot(time, ms.lamP,'-','LineWidth',1.5)
-            
-            figure;
-            a=axes();
-            set(a,'Units','normalized');
-            plot(time, ms.Pd,'-','LineWidth',1.5)
-            a =1;
-        end
+        time = linspace(1, nt, nt);
+        figure;
+        a=subplot(2,1,1);
+        set(a,'Units','normalized');
+        plot(time, ms.Pg, '-','LineWidth',1.5)
+        a=subplot(2,1,2);
+        set(a,'Units','normalized');
+        plot(time, ms.lamP,'-','LineWidth',1.5)
+        
+        figure;
+        a=axes();
+        set(a,'Units','normalized');
+        plot(time, ms.Pd,'-','LineWidth',1.5)
+        a =1;
 
         tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
         fprintf('Wrapper: NEXT DAM at Time %s\n', (tnext_day_ahead_market))
-
-        
     end
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%% Storage Profile %%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if storage_option
-        DA_RT_ratio = 3600 / Wrapper.config_data.real_time_market.interval;
-        RT_intervals = (size(Wrapper.results.DAM.PG,1)*DA_RT_ratio-1);
-        storage_profile = zeros(RT_intervals,1);
-        for a = 1:RT_intervals
-            storage_profile(a) = Wrapper.results.DAM.PG(floor((a-1)/DA_RT_ratio)+1,storage_idx+1);
-        end
-    end
-
+    
     %% *************************************************************
     %% Running Real Time Energy Imbalance Market
     %% *************************************************************    
@@ -419,19 +368,6 @@ while time_granted < Wrapper.duration
             time_granted;
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
-            %% Storage Profile %%
-            if storage_option
-                if mod(time_granted, 86400) ~= 0
-                    Wrapper.mpc.gen(storage_idx,2) = storage_profile(time_granted/Wrapper.config_data.real_time_market.interval);
-                    Wrapper.mpc.gen(storage_idx,9) = storage_profile(time_granted/Wrapper.config_data.real_time_market.interval);
-                    Wrapper.mpc.gen(storage_idx,10)= storage_profile(time_granted/Wrapper.config_data.real_time_market.interval);
-                else
-                    Wrapper.mpc.gen(storage_idx,2) = storage_profile(time_granted/Wrapper.config_data.real_time_market.interval-1);
-                    Wrapper.mpc.gen(storage_idx,9) = storage_profile(time_granted/Wrapper.config_data.real_time_market.interval-1);
-                    Wrapper.mpc.gen(storage_idx,10)= storage_profile(time_granted/Wrapper.config_data.real_time_market.interval-1);
-                end
-            end
-            %%%%%%%%%%%%%%%%%%%%%
             
             if isOctave
               hod = floor(24 * (datenum(current_time) - floor(datenum(current_time)))) + 1;
