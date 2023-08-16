@@ -142,6 +142,16 @@ classdef MATPOWERWrapper
                 Q_values = linspace(0, flex_load, blocks);
                 P_values = linspace(max(price_range), min(price_range),blocks); 
                 
+                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                 a = 5;
+%                 temp = exp(linspace(log(min(price_range))*a,log(max(price_range))*a,blocks));
+%                 % re-scale to be between 0 and 1
+%                 temp_01 = temp/max(temp) - min(temp)/max(temp);
+%                 % re-scale to be between your limits (i.e. 1 and 1.05)
+%                 P_values = temp_01*(max(price_range)-min(price_range)) + min(price_range);
+%                 P_values = sort(P_values,'descend');
+                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
                 DSO_bid = struct();
                 DSO_bid.P_bid = P_values;
                 DSO_bid.Q_bid = Q_values;
@@ -153,6 +163,7 @@ classdef MATPOWERWrapper
        
        %% Temporary testing functions for DAM bidding%% 
        function obj = get_DAM_bids_from_wrapper(obj, time, flexiblity_profile, price_range, blocks)  
+
             %   Get Flex and Inflex loads   %
             cosim_buses = obj.config_data.day_ahead_market.cosimulation_bus;
             load_forecast = obj.forecast.('load_profile');
@@ -177,6 +188,7 @@ classdef MATPOWERWrapper
             end
 
        end
+       
        %% Running PF to emulate System States %% 
        function obj = run_power_flow(obj, time)       
 
