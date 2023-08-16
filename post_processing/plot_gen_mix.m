@@ -5,8 +5,8 @@ close all
 
 
 case_data = read_json('../src/wrapper_config.json');
-casename = 'Base_Feb';
-month = 'February 2016';
+casename = 'Poly10';
+month = 'August 2016';
 start_time = datetime(case_data.start_time);
 % start_time = datetime('2016-08-01');
 
@@ -85,7 +85,8 @@ title('Simulated ERCOT Gen Mix from Wrapper')
 
 input_file_name = strcat(case_data.matpower_most_data.datapath, 'ERCOTGenByFuel2016.xlsx');
 ERCOT_actual_gen_mix_data_raw = readtable(input_file_name,'Sheet', month, 'Format','auto');
-ERCOT_actual_gen_mix_data_raw.Time.Format = 'yyyy-MM-dd hh:mm';
+% ERCOT_actual_gen_mix_data_raw.Time.Format = 'yyyy-MM-dd hh:mm';
+ERCOT_actual_gen_mix_data_raw.Time = datetime(ERCOT_actual_gen_mix_data_raw.Time, 'InputFormat', 'MM/dd/uuuu hh:mm:ss.SSS aa');
 ERCOT_actual_gen_mix_data = ERCOT_actual_gen_mix_data_raw(isbetween(ERCOT_actual_gen_mix_data_raw.Time, time_data(1), time_data(end)), :);
 vars = ERCOT_actual_gen_mix_data.Properties.VariableNames;
 

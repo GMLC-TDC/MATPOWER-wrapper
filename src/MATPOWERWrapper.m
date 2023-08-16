@@ -262,7 +262,7 @@ classdef MATPOWERWrapper
                mpc_mod.gencost = obj.mpc.gencost;
                mpc_mod.branch = obj.mpc.branch;
                mpc_mod.baseMVA = obj.mpc.baseMVA;
-               mpc_mod.genfuel = obj.mpc.genfuel;
+               % mpc_mod.genfuel = obj.mpc.genfuel;
                solution = rundcopf(mpc_mod, mpoptOPF); 
                success = solution.success;
                tries = tries + 1;
@@ -552,7 +552,7 @@ classdef MATPOWERWrapper
                for idx = 1:length(names)
                    file_name = strcat('../outputs/',case_name,'_DAM_',names{idx},'.csv');
                    if exist('OCTAVE_VERSION', 'builtin') ~= 0
-                       csvwrite(file_name,obj.results.RTM.(names{idx}));
+                       csvwrite(file_name,obj.results.DAM.(names{idx}));
                    else
                        writematrix(obj.results.DAM.(names{idx}), file_name);
                    end
