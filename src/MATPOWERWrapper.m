@@ -188,7 +188,7 @@ classdef MATPOWERWrapper
             end
 
        end
-       
+    
        %% Running PF to emulate System States %% 
        function obj = run_power_flow(obj, time)       
 
@@ -552,7 +552,7 @@ classdef MATPOWERWrapper
                for idx = 1:length(names)
                    file_name = strcat('../outputs/',case_name,'_DAM_',names{idx},'.csv');
                    if exist('OCTAVE_VERSION', 'builtin') ~= 0
-                       csvwrite(file_name,obj.results.RTM.(names{idx}));
+                       csvwrite(file_name,obj.results.DAM.(names{idx}));
                    else
                        writematrix(obj.results.DAM.(names{idx}), file_name);
                    end

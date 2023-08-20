@@ -4,15 +4,15 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
 case_name = 'Base';
-storage_option = 0;
-DAM_plot_option = 0;
+storage_option = 1;
+DAM_plot_option = 1;
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
 wrapper_startup;
 Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
-
+% Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 %% Read profile and save it within a strcuture called load
 if isOctave
     src_dir = prev_dir();
@@ -45,19 +45,22 @@ time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
 
 %% Updating the FLow Limits %%
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 0.5);
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 3);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
 Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
+% max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
 zonal_res_req = max_zonal_loads'*2.5/100; 
 % assuming Non VRE generators to participate in reserve allocations
-reserve_genId = [1:33];
+reserve_genId = [1:33]; 
+% reserve_genId = [1:13]; %% Test case
 % assuming 5% reserve availiability from all generators
 reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 7.5/100; 
+
 % assuming constant price for reserves from all generators
 reserve_genP = 1*ones(length(reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
@@ -65,8 +68,8 @@ Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc st
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 5;
-price_range = [25, 40];
-flex_max = 0; % Defines maximum flexibility as a % of total load
+price_range = [25, 60];
+flex_max = 10 ; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
 end
@@ -199,22 +202,6 @@ while time_granted < Wrapper.duration
                 Wrapper = Wrapper.get_DAM_bids_from_wrapper(time_granted, flex_profile_DAM, price_range, bid_blocks);
         end
         
-        %%%%%%%%%%%%%%% Add new profiles here %%%%%%%%%%%%%%%%%%%%%%%%%
-%         add_gen_index = size(Wrapper.mpc.gencost,1)+1;
-        %%% Unresponsive %%%
-        % Constant component of real load .bus(,3)
-%         add_profile = create_dam_profile( (ones(size(flex_profile,1),1) - (flex_profile)) .* (load_MW_profile.values(:,1,1)), 1, 1, 1, 3);
-%         profiles = getprofiles(add_profile, profiles);
-        % Constant component of reactive load .bus(,4)
-        %%% Responsive %%%
-        
-        % Minimum real power output .gen(,10)
-%         add_profile = create_dam_profile((flex_profile) .* (-1 * flexibility * (load_struct.values(:,1,1))), add_gen_index, 1, 2, 10);
-%         profiles = getprofiles(add_profile, profiles);
-        % Polynomial coefficients .gen(,5-7)
-        
-%           profiles = getprofiles(gen_struct); 
-%         profiles = getprofiles(load_struct, profiles);
 
         %% Extracting Raw System model for modifications %%
         mpc_mod = Wrapper.mpc;
@@ -250,7 +237,7 @@ while time_granted < Wrapper.duration
             mpc_mod.gen(Generator_index,5) = 0;% Minimum reactive power output .gen(,5)
             mpc_mod.gen(Generator_index,6) = 1;   %Voltage 1 p.u.
             mpc_mod.gen(Generator_index,8) = 1;   %gen status on
-            mpc_mod.gen(Generator_index,10) = -10000; %min generation - Large Number
+            mpc_mod.gen(Generator_index,10) = -10000; %min generation - Initialize with Large Number
             mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
             mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
 
@@ -275,12 +262,6 @@ while time_granted < Wrapper.duration
         end
 
         
-%         add_profile = create_dam_profile(Coeff(:,1), add_gen_index, 1, 9, 5);
-%         profiles = getprofiles(add_profile, profiles);
-%         add_profile = create_dam_profile(Coeff(:,2), add_gen_index, 1, 9, 6);
-%         profiles = getprofiles(add_profile, profiles);
-%         add_profile = create_dam_profile(Coeff(:,3), add_gen_index, 1, 9, 7);
-%         profiles = getprofiles(add_profile, profiles);
 %         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %         mpc = Wrapper.mpc;
@@ -312,6 +293,7 @@ while time_granted < Wrapper.duration
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
         must_run_idx = [75:110]; %% Nuclear + VRE
+%         must_run_idx = [10:18]; %% for Test case                                                  
         xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         xgd.PositiveLoadFollowReserveQuantity =  mpc_mod.gen(:,17)*60;
@@ -436,7 +418,7 @@ while time_granted < Wrapper.duration
             if isOctave
               hod = floor(24 * (datenum(current_time) - floor(datenum(current_time)))) + 1;
             else
-              hod = hour(current_time)+1;
+              hod = hour(datetime(current_time))+1;
             end
             % Collect Bids from DSO
             if Wrapper.config_data.include_helics

@@ -12,7 +12,7 @@ function storage = storage_100MWH(mpc)
 %%-----  storage  -----
 ecap = 100;              %% energy capacity
 pcap = ecap / 2;         %% power capacity
-scost = 30;               %% cost/value of initial/residual stored energy
+scost = 0;               %% cost/value of initial/residual stored energy
 %scost = 30;             %% cost/value of initial/residual stored energy
 %scost2 = 41.6666667;    %% cost/value of initial/residual stored energy
 %scost3 = 53.3333333;    %% cost/value of initial/residual stored energy
