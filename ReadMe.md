@@ -163,15 +163,17 @@ THere is where the simulation specifications begin.
 	"include_reserve_requirements": false,
 	"include_line_limits": true,
 
-  Which components of the simulation should be included (These settings run both a day-ahead and real-time market, but do not run additional powerflow simulations)\
-  "include_physics_powerflow": false,
-  "include_real_time_market": true, 
-  "include_day_ahead_market": true, 
+Which components of the simulation should be included (These settings run both a day-ahead and real-time market, but do not run additional powerflow simulations). THe user can also set wether to use the cosimulation platform HELICS or to provide all necessairy data locally.
+  
+    "include_physics_powerflow": false,
+    "include_real_time_market": true, 
+    "include_day_ahead_market": true, 
+    "include_helics": false, 
+ 
 
-  Here you set wether to use the cosimulation platform HELICS or to provide all necessairy data locally\
-  "include_helics": false, 
 
-  These are the settings for the various components, where type determines the power flow model used, interval determines how often each component is run in seconds. In this case, the power flow is set to run every minute, the day-ahead market runs every 5 minutes, and the day-ahead market runs once per day. The cosimulation bus setting refers to which bus(es) may have a flexible load and the bid model setting refers to the way in which the generator costs are input to the gencost data (see MatPower manual)\
+  These are the settings for the various components, where type determines the power flow model used, interval determines how often each component is run in seconds. In this case, the power flow is set to run every minute, the day-ahead market runs every 5 minutes, and the day-ahead market runs once per day. The cosimulation bus setting refers to which bus(es) may have a flexible load and the bid model setting refers to the way in which the generator costs are input to the gencost data (see MatPower manual)
+    
     "physics_powerflow":{
         "type": "DC",
         "interval": 60,
@@ -194,7 +196,8 @@ THere is where the simulation specifications begin.
         "transactive": true
     }
 
-  Here is where the cosimulation settings are given.
+Here is where the cosimulation settings are given.
+    
     "helics_config": {
         "coreType": "zmq",
         "name": "TransmissionSim",
