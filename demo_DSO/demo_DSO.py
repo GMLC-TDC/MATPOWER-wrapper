@@ -40,24 +40,40 @@ def create_helics_configuration(helics_config, filename):
     helics_config['publications'] = [];
     helics_config['subscriptions'] = [];
 
-    for bus in wrapper_config['cosimulation_bus']:
-        helics_config['publications'].append({'global': bool(True),
-                                           'key': str(helics_config['name']+ '.pcc.' + str(bus) + '.pq'),
-                                           'type': str('complex')
-                                           })
-        helics_config['publications'].append({'global': bool(True),
-                                           'key': str(helics_config['name']+ '.pcc.' + str(bus) + '.rt_energy.bid'),
-                                           'type': str('JSON')
-                                           })
-
-        helics_config['subscriptions'].append({'required': bool(False),
-                                           'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.pnv'),
-                                           'type': str('complex')
-                                           })
-        helics_config['subscriptions'].append({'required': bool(False),
-                                           'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.rt_energy.cleared'),
-                                           'type': str('JSON')
-                                           })
+    if wrapper_config['include_physics_powerflow']:
+        
+        for bus in wrapper_config['cosimulation_bus']:
+            helics_config['publications'].append({'global': bool(True),
+                                               'key': str(helics_config['name']+ '.pcc.' + str(bus) + '.pq'),
+                                               'type': str('complex')
+                                               })
+            helics_config['subscriptions'].append({'required': bool(False),
+                                               'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.pnv'),
+                                               'type': str('complex')
+                                               })
+                                               
+    if wrapper_config['include_real_time_market']:   
+        for bus in wrapper_config['cosimulation_bus']:                                        
+            helics_config['publications'].append({'global': bool(True),
+                                               'key': str(helics_config['name']+ '.pcc.' + str(bus) + '.rt_energy.bid'),
+                                               'type': str('JSON')
+                                               })
+    
+            helics_config['subscriptions'].append({'required': bool(False),
+                                               'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.rt_energy.cleared'),
+                                               'type': str('JSON')
+                                               })
+    if wrapper_config['include_day_ahead_market']:   
+        for bus in wrapper_config['cosimulation_bus']:                                        
+            helics_config['publications'].append({'global': bool(True),
+                                               'key': str(helics_config['name']+ '.pcc.' + str(bus) + '.da_energy.bid'),
+                                               'type': str('JSON')
+                                               })
+    
+            helics_config['subscriptions'].append({'required': bool(False),
+                                               'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.da_energy.cleared'),
+                                               'type': str('JSON')
+                                               })
 
     out_file = open(filename, "w")
     json.dump(helics_config, out_file, indent=4)
@@ -79,7 +95,7 @@ if __name__ == "__main__":
     start_date = datetime.strptime(wrapper_config['start_time'], '%Y-%m-%d %H:%M:%S')
     end_date   = datetime.strptime(wrapper_config['end_time'], '%Y-%m-%d %H:%M:%S')
     duration   = (end_date - start_date).total_seconds()
-
+    include_helics = wrapper_config['include_helics']
 
     ##### Getting Load Profiles from input Matpower data #####
     load_profiles = get_load_profiles(wrapper_config)
@@ -88,65 +104,125 @@ if __name__ == "__main__":
     ##### Setting up HELICS Configuration #####
     print('DSO: HELICS Version {}'.format(h.helicsGetVersion()))
     helics_config_filename = 'demo_DSO.json'
-    create_helics_configuration(wrapper_config['helics_config'], helics_config_filename)
+    if include_helics:
+        create_helics_configuration(wrapper_config['helics_config'], helics_config_filename)
 
-    ##### Starting HELICS Broker #####
-    # h.helicsBrokerDisconnect(broker)
-    broker = create_broker(2)
-
-
-    ##### Registering DSO Federate #####
-    fed = h.helicsCreateCombinationFederateFromConfig(helics_config_filename)
-    print('DSO: Registering {} Federate'.format(h.helicsFederateGetName(fed)))
-
-    pubkeys_count = h.helicsFederateGetPublicationCount(fed)
-    pub_keys = []
-    for pub_idx in range(pubkeys_count):
-        pub_object = h.helicsFederateGetPublicationByIndex(fed, pub_idx)
-        pub_keys.append(h.helicsPublicationGetName(pub_object))
-    print('DSO: {} Federate has {} Publications'.format(h.helicsFederateGetName(fed), pubkeys_count))
+        ##### Starting HELICS Broker #####
+        # h.helicsBrokerDisconnect(broker)
+        broker = create_broker(2)
 
 
-    subkeys_count = h.helicsFederateGetInputCount(fed)
-    sub_keys = []
-    for sub_idx in range(subkeys_count):
-        sub_object = h.helicsFederateGetInputByIndex(fed, sub_idx)
-        sub_keys.append(h.helicsSubscriptionGetTarget(sub_object))
-    print('DSO: {} Federate has {} Inputs'.format(h.helicsFederateGetName(fed), subkeys_count))
+        ##### Registering DSO Federate #####
+        fed = h.helicsCreateCombinationFederateFromConfig(helics_config_filename)
+        print('DSO: Registering {} Federate'.format(h.helicsFederateGetName(fed)))
 
-    # print(pub_keys)
-    # print(sub_keys)
+        pubkeys_count = h.helicsFederateGetPublicationCount(fed)
+        pub_keys = []
+        for pub_idx in range(pubkeys_count):
+            pub_object = h.helicsFederateGetPublicationByIndex(fed, pub_idx)
+            pub_keys.append(h.helicsPublicationGetName(pub_object))
+        print('DSO: {} Federate has {} Publications'.format(h.helicsFederateGetName(fed), pubkeys_count))
+    
+    
+        subkeys_count = h.helicsFederateGetInputCount(fed)
+        sub_keys = []
+        for sub_idx in range(subkeys_count):
+            sub_object = h.helicsFederateGetInputByIndex(fed, sub_idx)
+            sub_keys.append(h.helicsSubscriptionGetTarget(sub_object))
+        print('DSO: {} Federate has {} Inputs'.format(h.helicsFederateGetName(fed), subkeys_count))
+    
+        # print(pub_keys)
+        # print(sub_keys)
+    
+        #####  Entering Execution for DSO Federate #####
+        status = h.helicsFederateEnterExecutingMode(fed)
+        print('DSO: Federate {} Entering execution'.format(h.helicsFederateGetName(fed)))
 
-    #####  Entering Execution for DSO Federate #####
-    status = h.helicsFederateEnterExecutingMode(fed)
-    print('DSO: Federate {} Entering execution'.format(h.helicsFederateGetName(fed)))
-
-    buffer = 1  ###### Buffer to sending out data before the Operational Cycle  ######
+    buffer = 0  ###### Buffer to sending out data before the Operational Cycle  ######
     tnext_physics_powerflow = wrapper_config['physics_powerflow']['interval']-buffer
     tnext_real_time_market  = wrapper_config['real_time_market']['interval']-buffer
-    tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']-buffer
-
+    #tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']-buffer
+    #tnext_physics_powerflow = 0
+    #tnext_real_time_market  = 0
+    tnext_day_ahead_market  = 0
 
     # duration = 300
     time_granted = -1
     
     flexibility = .25
+    flexibility_profile = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    flexibility_profile = list(map(lambda x: x * flexibility, (i for i in flexibility_profile))) ##Multiply entire flex_profile by flex
     blocks = 10
-    P_range = np.array([10, 30]) 
+    P_range = np.array([25, 60]) 
     
-    while time_granted <= duration:
+    while time_granted < duration:
         
-        next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
+        #next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
+        next_helics_time = duration
+        if wrapper_config['include_day_ahead_market']:
+            next_helics_time = min([tnext_day_ahead_market,next_helics_time])
+        if wrapper_config['include_real_time_market']:
+            next_helics_time = min([tnext_real_time_market,next_helics_time])
+        if wrapper_config['include_physics_powerflow']:
+            next_helics_time = min([tnext_physics_powerflow,next_helics_time])
         
-        time_granted = h.helicsFederateRequestTime(fed, next_helics_time)
-
+        if include_helics:
+            #next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
+            time_granted = h.helicsFederateRequestTime(fed, next_helics_time)
+        else:
+            time_granted = next_helics_time
+            
         print('DSO: Requested {}s and got Granted {}s'.format(next_helics_time, time_granted))
         current_time = start_date + timedelta(seconds=time_granted)
         print('DSO: Current Time is {}'.format(current_time))
 
+        ######## Day Ahead Market Intervals ########
+        if time_granted >= tnext_day_ahead_market and wrapper_config['include_day_ahead_market'] and time_granted < duration:
+            constant_load = np.zeros(len(flexibility_profile))
+            flex_load = np.zeros(len(flexibility_profile))
+            Q_values = np.zeros([len(flexibility_profile),blocks])
+            Q_val_out = [[0]*blocks]*len(flexibility_profile)
+            #Q_val_out = {}
+            P_values = np.zeros([len(flexibility_profile),blocks])
+            P_val_out = [[0]*blocks]*len(flexibility_profile)
+            #P_val_out = {}
+            DAM_start = current_time + timedelta(seconds=buffer)
+            #DAM_start_idx = load_profiles.index[load_profiles.index == DAM_start]
+            DAM_end = DAM_start + timedelta(seconds = wrapper_config['day_ahead_market']['interval'] - 60)
+            #DAM_end_idx = load_profiles.index[load_profiles.index == DAM_end]
+            DAM_profile_full = load_profiles.loc[DAM_start:DAM_end]
+            DAM_profile = DAM_profile_full.resample('3600S').sum() / 60
+            for cosim_bus in wrapper_config['cosimulation_bus']:
+                load_data = DAM_profile.to_numpy()
+                MW_MVAR_factor = case['bus'][cosim_bus-1][2] / case['bus'][cosim_bus-1][3]
+                for t in range(len(flexibility_profile)):
+                    constant_load[t] = load_data[t][cosim_bus] * (1-flexibility_profile[t])
+                    flex_load[t] = load_data[t][cosim_bus] * flexibility_profile[t]
+                    Q_values[t] = np.linspace(0,flex_load[t],blocks)
+                    Q_val_out[t] = list(Q_values[t])
+                    P_values[t] = np.linspace(max(P_range), min(P_range),blocks)
+                    P_val_out[t] = list(P_values[t])
+                    
+                bid =  dict()
+                bid['constant_MW'] = list(constant_load)
+                bid['constant_MVAR'] = list(constant_load/MW_MVAR_factor)
+                bid['P_bid'] = P_val_out
+                bid['Q_bid'] = Q_val_out
+                    
+                    
+                bid_raw = json.dumps(bid)
+                    
+                #####  Publishing current loads for Co-SIM Bus the ISO Simulator #####
+                if include_helics:
+                    pub_key = [key for key in pub_keys  if ('pcc.' + str(cosim_bus) + '.da_energy.bid') in key ]
+                    pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
+                    status = h.helicsPublicationPublishString(pub_object, bid_raw)
+                    print('DSO: Published Bids for Bus {}'.format(cosim_bus))
+                
+            tnext_day_ahead_market  = tnext_day_ahead_market + wrapper_config['day_ahead_market']['interval']-buffer
 
         ######## Real time Market Intervals ########
-        if time_granted >= tnext_real_time_market and wrapper_config['include_real_time_market']:
+        if time_granted >= tnext_real_time_market and wrapper_config['include_real_time_market'] and time_granted < duration:
             
             profile_time = current_time + timedelta(seconds=buffer)
             data_idx = load_profiles.index[load_profiles.index == profile_time]
@@ -163,8 +239,8 @@ if __name__ == "__main__":
                 
                 current_load = complex(current_kW, current_kW*base_kVAR/base_kW)
                 bid =  dict()
-                bid['constant_kW'] = constant_load
-                bid['constant_kVAR'] = constant_load*base_kVAR/base_kW
+                bid['constant_MW'] = constant_load
+                bid['constant_MVAR'] = constant_load*base_kVAR/base_kW
                 bid['P_bid'] = list(P_values)
                 bid['Q_bid'] = list(Q_values)
                 
@@ -172,31 +248,32 @@ if __name__ == "__main__":
                 bid_raw = json.dumps(bid)
                 
                  #####  Publishing current loads for Co-SIM Bus the ISO Simulator #####
-                pub_key = [key for key in pub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.bid') in key ]
-                pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
-                status = h.helicsPublicationPublishString(pub_object, bid_raw)
-                print('DSO: Published Bids for Bus {}'.format(cosim_bus))
+                if include_helics:
+                    pub_key = [key for key in pub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.bid') in key ]
+                    pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
+                    status = h.helicsPublicationPublishString(pub_object, bid_raw)
+                    print('DSO: Published Bids for Bus {}'.format(cosim_bus))
                 
-                                
-            time_request = time_granted+2
-            while time_granted < time_request:
-                time_granted = h.helicsFederateRequestTime(fed, time_request)
-
-            print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
-
-            for cosim_bus in wrapper_config['cosimulation_bus']:
-                sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.cleared') in key ]
-                sub_object = h.helicsFederateGetSubscription(fed, sub_key[0])
-                allocation_raw = h.helicsInputGetString(sub_object)
-                allocation =  json.loads(allocation_raw)
-                print('DSO: Received cleared values {} for Bus {}'.format(allocation, cosim_bus))
+            if include_helics:                    
+                time_request = time_granted+2
+                while time_granted < time_request:
+                    time_granted = h.helicsFederateRequestTime(fed, time_request)
+    
+                print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
+    
+                for cosim_bus in wrapper_config['cosimulation_bus']:
+                    sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.cleared') in key ]
+                    sub_object = h.helicsFederateGetSubscription(fed, sub_key[0])
+                    allocation_raw = h.helicsInputGetString(sub_object)
+                    allocation =  json.loads(allocation_raw)
+                    print('DSO: Received cleared values {} for Bus {}'.format(allocation, cosim_bus))
 
             tnext_real_time_market = tnext_real_time_market + wrapper_config['real_time_market']['interval']           
             
             
             
         ######## Power Flow Intervals ########
-        if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow']:
+        if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow'] and time_granted < duration:
             
             profile_time = current_time + timedelta(seconds=buffer)
             data_idx = load_profiles.index[load_profiles.index == profile_time]
@@ -227,6 +304,7 @@ if __name__ == "__main__":
 
             tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow']['interval']
 
-    h.helicsFederateDisconnect(fed)
-    h.helicsBrokerWaitForDisconnect(broker,-1)
-    h.helicsCloseLibrary();
+    if include_helics:
+        h.helicsFederateDisconnect(fed)
+        h.helicsBrokerWaitForDisconnect(broker,-1)
+        h.helicsCloseLibrary();

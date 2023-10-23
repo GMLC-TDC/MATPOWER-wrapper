@@ -162,13 +162,13 @@ while time_granted < Wrapper.duration
             time_granted = 0;
         end
         fprintf('Wrapper: DA forecast at Time %s\n', datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400)))
-        % if Wrapper.config_data.include_helics
+        if Wrapper.config_data.include_helics
             Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
             Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        % else
-        %     Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        %     Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        % end
+        else
+            Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+            Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        end
 
         %% Clearing storage %%
         if storage_option
@@ -418,7 +418,9 @@ while time_granted < Wrapper.duration
     %% Running Real Time Energy Imbalance Market
     %% *************************************************************    
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market) && (time_granted < Wrapper.duration)
-            time_granted = time_granted - mod(time_granted,Wrapper.config_data.real_time_market.interval);
+            if mod(time_granted,Wrapper.config_data.real_time_market.interval) ~= 0
+                time_granted = time_granted - mod(time_granted,Wrapper.config_data.real_time_market.interval);
+            end
             time_granted;
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
@@ -470,7 +472,7 @@ while time_granted < Wrapper.duration
             else
                 tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
             end
-            tnext_real_time_market = tnext_real_time_market - mod(tnext_real_time_market,Wrapper.config_data.real_time_market.interval);
+            if tnext_real_time_market
     end
 end
 

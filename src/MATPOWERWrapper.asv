@@ -361,7 +361,7 @@ classdef MATPOWERWrapper
                     publication.global =   true;
                     obj.config_data.helics_config.publications = [obj.config_data.helics_config.publications publication];
 
-                    subscription.key =   strcat (SubSim, '.pcc.', mat2str(cosim_bus), '.da_energy.bid');
+                    subscription.key =   strcat (SubSim, '.pcc', mat2str(cosim_bus), '.da_energy.bid');
                     subscription.type =   "JSON";
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];

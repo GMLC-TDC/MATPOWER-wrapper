@@ -31,7 +31,7 @@
   "include_line_limits": true,
   "include_physics_powerflow": false,
   "include_real_time_market": true, 
-  "include_day_ahead_market": true, 
+  "include_day_ahead_market": false, 
   "include_helics": true, 
   "cosimulation_bus": [2],
   "physics_powerflow":{
