@@ -14,6 +14,11 @@ def create_broker(simulators):
 
     return broker
 
+def get_storage_specs(wrapper_config):
+    specs_path = '../src/storage_config.json'
+    with open(specs_path, 'r') as f:
+        specs = json.loads(f.read())
+    return specs
 
 def get_load_profiles(wrapper_config):
 
@@ -74,6 +79,12 @@ def create_helics_configuration(helics_config, filename):
                                                'key': str(Transmission_Sim_name + '.pcc.' + str(bus) + '.da_energy.cleared'),
                                                'type': str('JSON')
                                                })
+    if wrapper_config['include_storage']:
+        helics_config['publications'].append({'global': bool(True),
+                                           'key': str(helics_config['name']+ '.pcc.' + 'storage'),
+                                           'type': str('JSON')
+                                           })
+
 
     out_file = open(filename, "w")
     json.dump(helics_config, out_file, indent=4)
@@ -137,6 +148,28 @@ if __name__ == "__main__":
         #####  Entering Execution for DSO Federate #####
         status = h.helicsFederateEnterExecutingMode(fed)
         print('DSO: Federate {} Entering execution'.format(h.helicsFederateGetName(fed)))
+        
+        if wrapper_config['include_storage']:
+            temp_specs = get_storage_specs(wrapper_config)
+            # ecap = [100,100,100]
+            # pcap = [50,50,25]
+            # storage_bus = [2,2,1]
+            # eff = [1,1,1]
+            # ecap_out = list(ecap)
+            # pcap_out = list(pcap)
+            # bus_out = list(storage_bus)
+            # eff_out = list(eff)
+            # storage_specs = dict()
+            # storage_specs['ecap'] = ecap_out
+            # storage_specs['pcap'] = pcap_out
+            # storage_specs['bus'] = bus_out
+            # storage_specs['eff'] = eff_out
+            specs_raw = json.dumps(temp_specs)
+            pub_key = [key for key in pub_keys  if ('pcc.' + 'storage') in key ]
+            pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
+            status = h.helicsPublicationPublishString(pub_object, specs_raw)
+            print('DSO: Published Storage Specifications')
+            
 
     buffer = 0  ###### Buffer to sending out data before the Operational Cycle  ######
     tnext_physics_powerflow = wrapper_config['physics_powerflow']['interval']-buffer

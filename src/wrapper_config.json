@@ -32,7 +32,8 @@
   "include_physics_powerflow": false,
   "include_real_time_market": true, 
   "include_day_ahead_market": true, 
-  "include_helics": true, 
+  "include_helics": true,
+  "include_storage": true,
   "cosimulation_bus": [2],
   "physics_powerflow":{
     "type": "DC",

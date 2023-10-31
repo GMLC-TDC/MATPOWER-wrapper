@@ -361,11 +361,18 @@ classdef MATPOWERWrapper
                     publication.global =   true;
                     obj.config_data.helics_config.publications = [obj.config_data.helics_config.publications publication];
 
-                    subscription.key =   strcat (SubSim, '.pcc', mat2str(cosim_bus), '.da_energy.bid');
+                    subscription.key =   strcat (SubSim, '.pcc.', mat2str(cosim_bus), '.da_energy.bid');
                     subscription.type =   "JSON";
                     subscription.required =   true;
                     obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
                 end
+            end
+                %%%%%%%%%%%%%%%%% Creating Sub for storage %%%%%%%%%%%%%%%%%% 
+            if obj.config_data.include_storage 
+                subscription.key =   strcat (SubSim, '.pcc.', 'storage');
+                subscription.type =   "JSON";
+                subscription.required =   true;
+                obj.config_data.helics_config.subscriptions = [obj.config_data.helics_config.subscriptions subscription];
             end
             write_json(config_file_name, obj.config_data.helics_config);
        end
@@ -405,6 +412,15 @@ classdef MATPOWERWrapper
            
        end
        
+       %% Getting storage specs from HELICS-based Co-simulation%%
+       function specs = get_storage_from_helics(obj)
+            temp = strfind(obj.helics_data.sub_keys, strcat('.pcc.', 'storage'));
+            subkey_idx = find(~cellfun(@isempty,temp));
+            sub_object = helicsFederateGetSubscription(obj.helics_data.fed, obj.helics_data.sub_keys{subkey_idx});
+            raw_specs = helicsInputGetString(sub_object);
+            
+       end
+
        %% Updating loads from Cosimulation 
        function obj = get_loads_from_helics(obj)
     

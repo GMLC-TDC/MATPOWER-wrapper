@@ -4,14 +4,16 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
 case_name = 'Base';
-storage_option = 0;
 DAM_plot_option = 0;
+stor = struct();
+stor.state = 0;
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
 wrapper_startup;
 Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
+storage_option = Wrapper.config_data.include_storage;   %In wrapper_config
 % Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 %% Read profile and save it within a strcuture called load
 if isOctave
@@ -86,15 +88,20 @@ end
 
 
 
-%%%%%%%%%%%%%%%%%%% Adding example storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-if storage_option
-    %Define storage specs for all storage devices 
-    storage_specs = read_json("storage_config.json");
-
-    [~,Wrapper.mpc,~,st_data] = addstorage(storage_custom(storage_specs),Wrapper.mpc);
-    stor = storage_custom(storage_specs);
-
-end
+%%%%%%%%%%%%%%%%%%%%%%% Adding storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% if storage_option
+%     if Wrapper.config_data.include_helics
+%         % storage_specs = read_json("storage_config.json");
+%         % pause(1);
+%         Wrapper = get_storage_from_helics(Wrapper);
+%         storage_specs = Wrapper.storage_specs;
+%     else
+%         storage_specs = read_json("storage_config.json");
+%     end
+%     [~,Wrapper.mpc,~,st_data] = addstorage(storage_custom(storage_specs),Wrapper.mpc);
+%     stor = storage_custom(storage_specs);
+% 
+% end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -161,26 +168,22 @@ while time_granted < Wrapper.duration
         if time_granted < 86400
             time_granted = 0;
         end
+        
+        
+
         fprintf('Wrapper: DA forecast at Time %s\n', datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400)))
-        if Wrapper.config_data.include_helics
+        % if Wrapper.config_data.include_helics
             Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
             Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        else
-            Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-            Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        end
+        % else
+        %     Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        %     Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        % end
 
         %% Clearing storage %%
-        if storage_option
-            Wrapper.mpc.gen(st_data.UnitIdx,:) = stor.gen;
-            % Alternate slow method (If errors occur later)
-            % for a=1:length(st_data.UnitIdx)
-            %     Wrapper.mpc.gen(st_data.UnitIdx(a),2) = stor.gen(a,2);
-            %     Wrapper.mpc.gen(st_data.UnitIdx(a),8) = 1;              %Set gen status on
-            %     Wrapper.mpc.gen(st_data.UnitIdx(a),9) = stor.gen(a,9);
-            %     Wrapper.mpc.gen(st_data.UnitIdx(a),10) = stor.gen(a,10);
-            % end
-        end
+        % if storage_option
+        %     Wrapper.mpc.gen(st_data.UnitIdx,:) = stor.gen;
+        % end
 
         %% Adding Generation Profiles from forecast for VRE-based Generators %%
         gen_info = Wrapper.config_data.matpower_most_data.('wind_profile_info');
@@ -220,6 +223,36 @@ while time_granted < Wrapper.duration
 
         %% Extracting Raw System model for modifications %%
         mpc_mod = Wrapper.mpc;
+        %%%%%%%%%%%%%%%%%%%%%%% Adding storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        if storage_option
+            if Wrapper.config_data.include_helics
+                % storage_specs = read_json("storage_config.json");
+                % pause(1);
+                Wrapper = get_storage_from_helics(Wrapper);
+                storage_specs = Wrapper.storage_specs;
+            else
+                storage_specs = read_json("storage_config.json");
+            end
+            %Detect and remove existing storage
+            if stor.state == 1
+                %Remove from .gen
+                mpc_mod.gen(st_data.UnitIdx,:) = [];
+                %Remove from .gencost
+                mpc_mod.gen(st_data.UnitIdx,:)
+                %Remove from .genfuel
+                
+                stor.state = 0;
+            end
+            %Add new storage
+            [~,mpc_mod,~,st_data] = addstorage(storage_custom(storage_specs),mpc_mod);
+            stor = storage_custom(storage_specs);
+            stor.gen = mpc_mod.gen(st_data.UnitIdx,:);
+            stor.gencost = mpc_mod.gencost(st_data.UnitIdx,:);
+            stor.genfuel = mpc_mod.genfuel(st_data.UnitIdx,:);
+            stor.state = 1;
+        end
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
              
         %% Adding Dispatchable Load Profiles from Bids %%
         for i = 1 : length(Wrapper.config_data.day_ahead_market.cosimulation_bus)
@@ -242,7 +275,7 @@ while time_granted < Wrapper.duration
             % DAM_Bid_Coeff{bus_number} = DSO_DAM_bid_Coeff;
             % DAM_RES_MAX{bus_number} = DSO_DAM_RES_MAX;
            
-            Generator_index = size(Wrapper.mpc.gen,1) + 1;
+            Generator_index = size(mpc_mod.gen,1) + 1;
             
             %%% Adding the Dispatchable Load as a new Generator %%%
             mpc_mod.genfuel(Generator_index, :) = {{'Dispatchable Load'; bus_number}}; 
@@ -368,6 +401,18 @@ while time_granted < Wrapper.duration
         else
             fprintf('Wrapper: DAM OPF Failed on attempt');
         end
+
+        for i = 1 : length(Wrapper.config_data.day_ahead_market.cosimulation_bus)
+
+			   Bus_number = Wrapper.config_data.day_ahead_market.cosimulation_bus(length(Wrapper.config_data.day_ahead_market.cosimulation_bus)-i+1,1);
+               Generator_index = size(mpc_mod.gen,1);
+               Wrapper.DAM_allocations{Bus_number}.P_clear =  ms.lamP(Bus_number,:); 
+               Wrapper.DAM_allocations{Bus_number}.Q_clear =  ms.Pg(Bus_number,:);
+
+               mpc_mod.genfuel(Generator_index,:) = [];
+               mpc_mod.gen(Generator_index,:) = [];
+               mpc_mod.gencost(Generator_index,:) = [];
+	       end
         % save('-text', 'msout.txt', 'ms');
         %%%%%%%%%%%%% Remove extra generator %%%%%%%%%%%%%%%%
 %         mpc.genfuel(add_gen_index,:) = [];
@@ -418,14 +463,17 @@ while time_granted < Wrapper.duration
     %% Running Real Time Energy Imbalance Market
     %% *************************************************************    
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market) && (time_granted < Wrapper.duration)
-            if mod(time_granted,Wrapper.config_data.real_time_market.interval) ~= 0
-                time_granted = time_granted - mod(time_granted,Wrapper.config_data.real_time_market.interval);
-            end
+            time_granted = time_granted - mod(time_granted,Wrapper.config_data.real_time_market.interval);
             time_granted;
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
             %% Storage Profile %%
             if storage_option && Wrapper.config_data.include_day_ahead_market
+                % Add Storage back in
+                Wrapper.mpc.gen(st_data.UnitIdx,:) = stor.gen;
+                Wrapper.mpc.gencost(st_data.UnitIdx,:) = stor.gencost;
+                Wrapper.mpc.genfuel(st_data.UnitIdx,:) = stor.genfuel;
+                
                 for i=1:length(st_data.UnitIdx)
                     if mod(time_granted, 86400) ~= 0
                         Wrapper.mpc.gen(st_data.UnitIdx(i),2) = storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval);
@@ -472,7 +520,7 @@ while time_granted < Wrapper.duration
             else
                 tnext_real_time_market = tnext_real_time_market + Wrapper.config_data.real_time_market.interval;
             end
-            if tnext_real_time_market
+            tnext_real_time_market = tnext_real_time_market - mod(tnext_real_time_market,Wrapper.config_data.real_time_market.interval);
     end
 end
 
