@@ -7,12 +7,15 @@ case_name = 'Base';
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
+flag_600_gen = 0;
+flag_uc = 0;
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 %% Load Model
 wrapper_startup;
-Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
+% Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
+Wrapper = MATPOWERWrapper('wrapper_config_v2.json', isOctave);
 storage_option = Wrapper.config_data.include_storage;   %In wrapper_config
 % Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 %% Read profile and save it within a strcuture called load
@@ -20,7 +23,74 @@ if isOctave
     src_dir = prev_dir();
 end
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
-Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
+if flag_600_gen
+    % Convert to 600 Generators
+    mpc_600 = load('8_bus_600_gen_case.mat');
+    Wrapper.mpc.gen = mpc_600.mpc.gen;
+    Wrapper.mpc.gencost = mpc_600.mpc.gencost;
+    Wrapper.mpc.genfuel = mpc_600.mpc.genfuel;
+    Wrapper.MATPOWERModifier.MATPOWERModel.gen = mpc_600.mpc.gen;
+    Wrapper.MATPOWERModifier.MATPOWERModel.gencost = mpc_600.mpc.gencost;
+    Wrapper.MATPOWERModifier.MATPOWERModel.genfuel = mpc_600.mpc.genfuel;
+    
+    % Generation setup
+    generation = {};
+    for k = 1:length(Wrapper.mpc.genfuel)
+        Wrapper.mpc.genfuel{k, 1};
+        generation.(Wrapper.mpc.genfuel{k, 1}).cap = 0;
+    end
+    for k = 1:length(Wrapper.mpc.genfuel)
+        generation.(Wrapper.mpc.genfuel{k, 1}).cap = generation.(Wrapper.mpc.genfuel{k, 1}).cap + Wrapper.mpc.gen(k, 9);
+    end
+    % Renewables profile
+    wind_data_2021 = readtable('Hourly_Aggregated_Wind_Output_2021.xlsx');
+    solar_data_2021 = readtable('Hourly_Aggregated_Solar_Output_2021.xlsx');
+    wind_gen_map = [];
+    solar_gen_map = [];
+    for k = 1:length(Wrapper.mpc.genfuel)
+        if Wrapper.mpc.genfuel{k, 1} == "wind"
+%         [val, wind_idx] = min(abs(etime(datevec(datenum(wind_data_2021.Time)), datevec(datenum(starttime)))));
+            wind_value_2021_t = wind_data_2021.ERCOT_WIND_GEN;
+            wind_dis(:,k) = Wrapper.mpc.gen(k,9) * wind_value_2021_t / generation.("wind").cap;
+            wind_gen_map(length(wind_gen_map)+1) = k;
+    %         s1 = s1 + mpc.gen(k,9);
+        end
+        if Wrapper.mpc.genfuel{k, 1} == "solar"
+    %         [val, solar_idx] = min(abs(etime(datevec(datenum(solar_data_2021.Time)), datevec(datenum(starttime)))));
+            solar_value_2021_t = solar_data_2021.ERCOT_PVGR_GEN;
+            solar_dis(:,k) = Wrapper.mpc.gen(k,9) * solar_value_2021_t / generation.("solar").cap;
+            solar_gen_map(length(solar_gen_map)+1) = k;
+    %         s2 = s2 + mpc.gen(k,9);
+        end
+    end
+    % Profile info
+    wind_start = ((datenum(Wrapper.config_data.start_time) - datenum(wind_data_2021.Time(1))) * 24) + 1;
+    wind_end = (datenum(Wrapper.config_data.end_time) - datenum(wind_data_2021.Time(1))) * 24;
+    solar_start = ((datenum(Wrapper.config_data.start_time) - datenum(solar_data_2021.Time(1))) * 24) + 1;
+    solar_end = (datenum(Wrapper.config_data.end_time) - datenum(solar_data_2021.Time(1))) * 24;
+
+    Wrapper.profiles.wind_profile = Wrapper.profiles.load_profile(:,1);
+    Wrapper.profiles.solar_profile = Wrapper.profiles.load_profile(:,1);
+
+    for a=wind_start:wind_end
+        for b=1:60
+            Wrapper.profiles.wind_profile(((a-wind_start)*60)+b,2:1+length(wind_gen_map)) = wind_dis(a,wind_gen_map);
+        end
+    end
+    Wrapper.profiles.wind_profile(end,2:end) = Wrapper.profiles.wind_profile(end-1,2:end);
+
+    for a=solar_start:solar_end
+        for b=1:60
+            Wrapper.profiles.solar_profile(((a-solar_start)*60)+b,2:1+length(solar_gen_map)) = solar_dis(a,solar_gen_map);
+        end
+    end
+    Wrapper.profiles.solar_profile(end,2:end) = Wrapper.profiles.solar_profile(end-1,2:end);
+    % Update wind profile info
+    Wrapper.config_data.matpower_most_data.wind_profile_info.data_map.columns = transpose(linspace(2,length(wind_gen_map)+1,length(wind_gen_map)));
+    Wrapper.config_data.matpower_most_data.wind_profile_info.data_map.gen = transpose(wind_gen_map);
+else
+    Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
+end
 if isOctave
     cd(src_dir);
 end
@@ -67,7 +137,11 @@ reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 7.5/100;
 reserve_genP = 1*ones(length(reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
-
+if flag_600_gen
+    Wrapper.mpc.gen = mpc_600.mpc.gen;
+    Wrapper.mpc.gencost = mpc_600.mpc.gencost;
+    Wrapper.mpc.genfuel = mpc_600.mpc.genfuel;
+end
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 5;
 price_range = [25, 60];
@@ -376,7 +450,7 @@ while time_granted < Wrapper.duration
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
         mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
         mpopt.mips.max_it = 200;
-        mpopt = mpoption(mpopt, 'most.uc.run', 0);
+        mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
