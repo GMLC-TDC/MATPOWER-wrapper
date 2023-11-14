@@ -7,7 +7,7 @@ case_name = 'Base';
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
-flag_600_gen = 0;
+flag_600_gen = 1;
 flag_uc = 0;
 
 %% Check if MATLAB or OCTAVE
@@ -27,6 +27,7 @@ if isOctave
 end
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
+Wrapper = Wrapper.read_profiles('solar_profile_info', 'solar_profile');
 
 if isOctave
     cd(src_dir);
@@ -54,8 +55,13 @@ time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
 
 %% Updating the FLow Limits %%
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1);
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
+
+if flag_600_gen == 1
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1.3);
+else
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
+end
 Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
 
 %% Adding Zonal Reserves %%
@@ -65,14 +71,33 @@ max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
 zonal_res_req = max_zonal_loads'*2.5/100; 
 % assuming Non VRE generators to participate in reserve allocations
-reserve_genId = [1:33]; 
+if flag_600_gen == 1
+    %% 600 Gen Case %%
+    Wrapper.reserve_genId = [];
+    Wrapper.mustrun_genId = [];
+    for gen_idx = 1:length(Wrapper.mpc.genfuel)
+        if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" || Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || ...
+                        Wrapper.mpc.genfuel(gen_idx) ==  "coal" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+            Wrapper.reserve_genId = [Wrapper.reserve_genId gen_idx];
+        end
+        if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" || Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || ...
+                        Wrapper.mpc.genfuel(gen_idx) ==  "solar" || Wrapper.mpc.genfuel(gen_idx) ==  "wind" %|| Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+            Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
+        end
+        
+    end
+else
+    Wrapper.reserve_genId = [1:33]; %% 100 Gen case
+    Wrapper.mustrun_genId = [75:110]; 
+end
 % reserve_genId = [1:13]; %% Test case
+
 % assuming 5% reserve availiability from all generators
-reserve_genQ = Wrapper.mpc.gen(reserve_genId, 9)* 7.5/100; 
+reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 7.5/100; 
 
 % assuming constant price for reserves from all generators
-reserve_genP = 1*ones(length(reserve_genId), 1);
-Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
+reserve_genP = 1*ones(length(Wrapper.reserve_genId), 1);
+Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(Wrapper.reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
@@ -138,13 +163,15 @@ while time_granted < Wrapper.duration
 
     current_time = datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400));
     fprintf('Wrapper: Current Time %s\n', current_time)
+    
+    
     %% *************************************************************
     %% Running Physics based Power Flow
     %% *************************************************************
     if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_physics_powerflow)     
         Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
         Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
-
+        Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'solar_profile_info', 'solar_profile');
         % Collect measurements from distribution networks
         if Wrapper.config_data.include_helics  
             Wrapper = Wrapper.get_loads_from_helics();
@@ -165,6 +192,7 @@ while time_granted < Wrapper.duration
         end
     end
     
+    
     %% *************************************************************
     %% Running Day Ahead Energy Arbitrage Market
     %% ************************************************************* 
@@ -182,6 +210,7 @@ while time_granted < Wrapper.duration
         % if Wrapper.config_data.include_helics
             Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
             Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+            Wrapper = Wrapper.get_DA_forecast('solar_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         % else
         %     Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         %     Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
@@ -197,8 +226,13 @@ while time_granted < Wrapper.duration
         gen_idx = gen_info.data_map.gen;
         data_idx = gen_info.data_map.columns;
         % gen_profile = dam_gen_profiles(Wrapper.forecast.wind_profile, gen_idx, data_idx); 
-        VRE_profile = create_dam_profile(Wrapper.forecast.wind_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
-    
+        VRE_wind_profile = create_dam_profile(Wrapper.forecast.wind_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
+        
+        gen_info = Wrapper.config_data.matpower_most_data.('solar_profile_info');
+        gen_idx = gen_info.data_map.gen;
+        data_idx = gen_info.data_map.columns;
+        VRE_solar_profile = create_dam_profile(Wrapper.forecast.solar_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
+        
         %% Adding Load Profiles from forecast %%
         load_info = Wrapper.config_data.matpower_most_data.('load_profile_info');
         load_idx = load_info.data_map.bus;
@@ -214,9 +248,10 @@ while time_granted < Wrapper.duration
         Load_MW_profile= create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, PD); 
         MVAR_MW_ratio = Wrapper.mpc.bus(:,QD)./ Wrapper.mpc.bus(:,PD);
         Load_MVAR_profile = create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, QD, MVAR_MW_ratio); 
-
         
-        profiles = getprofiles(VRE_profile); 
+        
+        profiles = getprofiles(VRE_wind_profile); 
+        profiles = getprofiles(VRE_solar_profile, profiles);
         profiles = getprofiles(Load_MW_profile, profiles);
         profiles = getprofiles(Load_MVAR_profile, profiles);
         
@@ -229,6 +264,17 @@ while time_granted < Wrapper.duration
         
 
         %% Extracting Raw System model for modifications %%
+%         mpc_mod = struct();
+%         mpc_mod.bus = Wrapper.mpc.bus;
+%         mpc_mod.gen = Wrapper.mpc.gen;
+%         mpc_mod.gencost = Wrapper.mpc.gencost;
+%         mpc_mod.branch = Wrapper.mpc.branch;
+%         mpc_mod.baseMVA = Wrapper.mpc.baseMVA;
+%         mpc_mod.genfuel = Wrapper.mpc.genfuel;
+%         mpc_mod.reserves = Wrapper.mpc.reserves;
+%         mpc_mod.zones = Wrapper.mpc.zones;
+
+        
         mpc_mod = Wrapper.mpc;
         %%%%%%%%%%%%%%%%%%%%%%% Adding storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         if storage_option
@@ -339,25 +385,42 @@ while time_granted < Wrapper.duration
 %         mpc.gen(:, 7) =mpc.gen(:, 7)*10;
 
         %% Adding Ramping Constraints for Generators  %%
-        mpc_mod.gen(:, 18) = mpc_mod.gen(:,17)*60;
-        mpc_mod.gen(:, 19) = mpc_mod.gen(:,17)*60;
-        mpc_mod.gen(77:end, 18:20) = 10000;
+        if flag_600_gen == 1
+            mpc_mod.gen(:, 17) = mpc_mod.gen(:, 19)*2;
+            mpc_mod.gen(:, 18) = mpc_mod.gen(:, 19)*2;
+            mpc_mod.gen(:, 20) = mpc_mod.gen(:, 19)*2;
+        else
+            temp = mpc_mod.gen(:,17)*60;
+            % mpc_mod.gen(:, 17) = temp;
+            mpc_mod.gen(:, 18) = temp;
+            mpc_mod.gen(:, 19) = temp;
+            mpc_mod.gen(:, 20) = temp;
+            mpc_mod.gen(77:end, 18:20) = 10000;
+        end
+
         % mpc_mod.branch(:,6:8) = mpc_mod.branch(:,6:8)*0.5;
         % mpc_mod.branch(7,6:8) = mpc_mod.branch(7,6:8)*3;
-        % mpc_mod = rundcopf(mpc_mod);
+        
+
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
-        must_run_idx = [75:110]; %% Nuclear + VRE
-%         must_run_idx = [10:18]; %% for Test case                                                  
-        xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
-        xgd.PositiveLoadFollowReserveQuantity =  mpc_mod.gen(:,17)*60;
-        xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generators
+        must_run_idx = Wrapper.mustrun_genId; %% Nuclear + VRE
+        %must_run_idx = [10:18]; %% for Test case                                                  
+        xgd_table.data(must_run_idx) = 2;
+        
+        if flag_600_gen == 1
+            xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:, 19)*2; 
+        else
+            xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:,17)*60; %mpc_mod.gen(:,19)*2;
+            xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generation
+        end 
         xgd.NegativeLoadFollowReserveQuantity = xgd.PositiveLoadFollowReserveQuantity;
+
         if time_granted == 0
-            xgd.InitialState = 1*ones(size(mpc_mod.gen, 1),1);
-%         else:
-%             xgd.InitialPg = Wrapper.PG.;
+            xgd.InitialPg = mpc_mod.gen(:, 10);
+        else
+            xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
         end
         %% Adding Ramping Constraints for dispatchable loads  %%
         for i = length(Wrapper.config_data.day_ahead_market.cosimulation_bus):-1:1
@@ -381,9 +444,9 @@ while time_granted < Wrapper.duration
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 0, 'most.dc_model', 1);
-        mpopt.mips.max_it = 200;
-        mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
+        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
+%         mpopt.mips.max_it = 2000;
+        mpopt = mpoption(mpopt, 'most.uc.run', 0);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
@@ -472,8 +535,9 @@ while time_granted < Wrapper.duration
     if (time_granted >= tnext_real_time_market) && (Wrapper.config_data.include_real_time_market) && (time_granted < Wrapper.duration)
             time_granted = time_granted - mod(time_granted,Wrapper.config_data.real_time_market.interval);
             time_granted;
-            Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
-            Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
+            Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info',  'load_profile');
+            Wrapper = Wrapper.update_VRE_from_profiles(time_granted,   'wind_profile_info',  'wind_profile');
+            Wrapper = Wrapper.update_VRE_from_profiles(time_granted,   'solar_profile_info', 'solar_profile');
             %% Storage Profile %%
             if storage_option && Wrapper.config_data.include_day_ahead_market
                 % Add Storage back in

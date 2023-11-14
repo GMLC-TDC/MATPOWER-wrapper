@@ -12,7 +12,7 @@
       }
     },
     "wind_profile_info": {
-    	"filename": "2021_ERCOT_60min_Wind_Data.csv",
+    	"filename": "2021_ERCOT_60min_Wind_Data_600_gen.csv",
     	"resolution": 3600,
     	"starting_time": "2021-01-01 00:00:00",
 		"data_map": {
@@ -21,7 +21,7 @@
 			}
 		},
     "solar_profile_info": {
-        "filename": "2021_ERCOT_60min_Solar_Data.csv",
+        "filename": "2021_ERCOT_60min_Solar_Data_600_gen.csv",
     	"resolution": 3600,
     	"starting_time": "2021-01-01 00:00:00",
 		"data_map": {
@@ -31,8 +31,8 @@
 		}
  	},
   "results_files": "../results/", 
-  "start_time": "2021-02-6 00:00:00", 
-  "end_time": "2021-02-8 00:00:00", 
+  "start_time": "2021-08-06 00:00:00", 
+  "end_time": "2021-08-09 00:00:00", 
   "include_contingencies": false, 
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
@@ -52,14 +52,14 @@
   "real_time_market": {
     "type": "DC",
     "interval": 300, 
-    "cosimulation_bus": [2],
+    "cosimulation_bus": [],
     "transactive": true,
 	"bid_model": "poly"
   }, 
   "day_ahead_market":{
     "type": "DC",
     "interval": 86400,
-    "cosimulation_bus": [2],
+    "cosimulation_bus": [],
     "forecast_error": 10,
     "transactive": true
   },

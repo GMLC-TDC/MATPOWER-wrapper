@@ -8,6 +8,9 @@ classdef MATPOWERModifier
        %%  Read Model from JSON or m format %%
        function obj = MATPOWERModifier(config_file)
            obj.MATPOWERModel = obj.read_model(config_file);
+           %% Any Nan Values in Ramping are converted to InF %%
+           gen_idx = isnan(obj.MATPOWERModel.gen(:,19));
+           obj.MATPOWERModel.gen(gen_idx, 19) = 10000;
        end
        
        %% Change the Branch Flow Limits 

@@ -17,6 +17,8 @@ classdef MATPOWERWrapper
       forecast= struct();
       results =  struct('PF', 1,'RTM', {},'DAM', {});
       storage_specs = struct();
+      reserve_genId = [];
+      mustrun_genId = [];
       
    end
    
@@ -38,7 +40,8 @@ classdef MATPOWERWrapper
            obj.duration = (obj.end_time - obj.start_time)*24*3600;
            case_name = strcat(obj.config_data.matpower_most_data.datapath, obj.config_data.matpower_most_data.case_name);
            obj.MATPOWERModifier = MATPOWERModifier(case_name);
-           obj.mpc = obj.MATPOWERModifier.MATPOWERModel;
+           obj.mpc = obj.MATPOWERModifier.MATPOWERModel;         
+           
            obj.results(1).PF =  struct('VM',{}, 'VA', {});
            obj.results(1).RTM =  struct('PG',{} , 'PD', {}, 'LMP', {});
            obj.octave = isOctave; 
@@ -260,10 +263,13 @@ classdef MATPOWERWrapper
                mpc_mod = struct();
                mpc_mod.bus = obj.mpc.bus;
                mpc_mod.gen = obj.mpc.gen;
+               infgen_idx = find( mpc_mod.gen(:,9) <  mpc_mod.gen(:,10));
+               mpc_mod.gen(infgen_idx,9) = 0;
                mpc_mod.gencost = obj.mpc.gencost;
                mpc_mod.branch = obj.mpc.branch;
                mpc_mod.baseMVA = obj.mpc.baseMVA;
                mpc_mod.genfuel = obj.mpc.genfuel;
+              
                solution = rundcopf(mpc_mod, mpoptOPF); 
                success = solution.success;
                tries = tries + 1;
@@ -520,7 +526,29 @@ classdef MATPOWERWrapper
            end
        end
        
+       
+       
         %% Send Allocations to Cosimulation 
+       function obj = send_DA_allocations_to_helics(obj)
+           %% Importing the HELICS Libraries %%
+           if obj.octave
+               helics; 
+           else
+               import helics.*
+           end
+           
+           for bus_idx= 1 : length(obj.config_data.cosimulation_bus)
+               cosim_bus = obj.config_data.cosimulation_bus(bus_idx);
+               temp = strfind(obj.helics_data.pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.rt_energy.cleared'));
+               pubkey_idx = find(~cellfun(@isempty,temp));
+               pub_object = helicsFederateGetPublication(obj.helics_data.fed, obj.helics_data.pub_keys{pubkey_idx});
+                
+               raw_allocation = jsonencode (obj.RTM_allocations{cosim_bus});
+               helicsPublicationPublishString(pub_object, raw_allocation);
+               fprintf('Wrapper: Send Cleared Values to Cosim bus %d\n', cosim_bus);
+            end    
+       end
+       
        function obj = send_RTM_allocations_to_helics(obj)
            %% Importing the HELICS Libraries %%
            if obj.octave
