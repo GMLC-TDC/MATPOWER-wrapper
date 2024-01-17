@@ -3,12 +3,14 @@ clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 
-case_name = 'Base';
+case_name = 'Base';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
 flag_600_gen = 1;
 flag_uc = 0;
+Mismatch = 0;
+flex = 0;
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
@@ -27,7 +29,9 @@ if isOctave
 end
 Wrapper = Wrapper.read_profiles('load_profile_info', 'load_profile');
 Wrapper = Wrapper.read_profiles('wind_profile_info', 'wind_profile');
-Wrapper = Wrapper.read_profiles('solar_profile_info', 'solar_profile');
+if flag_600_gen
+    Wrapper = Wrapper.read_profiles('solar_profile_info', 'solar_profile');
+end
 
 if isOctave
     cd(src_dir);
@@ -57,9 +61,12 @@ next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_
 %% Updating the FLow Limits %%
 
 if flag_600_gen == 1
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1.3);
+    reduction = 0.65;
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:13, reduction); %Reduce for line limits
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(8, (1/reduction));
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(12, (1/reduction));
 else
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1:8], 1);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:8, 1);
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
 end
 Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
@@ -81,7 +88,7 @@ if flag_600_gen == 1
             Wrapper.reserve_genId = [Wrapper.reserve_genId gen_idx];
         end
         if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" || Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || ...
-                        Wrapper.mpc.genfuel(gen_idx) ==  "solar" || Wrapper.mpc.genfuel(gen_idx) ==  "wind" %|| Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+                        Wrapper.mpc.genfuel(gen_idx) ==  "solar" || Wrapper.mpc.genfuel(gen_idx) ==  "wind" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
             Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
         end
         
@@ -102,15 +109,15 @@ Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc st
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 5;
-price_range = [25, 60];
-flex_max = 10 ; % Defines maximum flexibility as a % of total load
+price_range = [10, 20];
+flex_max = flex ; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
 end
 flex_profile = flex_max*ones(24, 1)/100;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%  Mismatch runs %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-Mismatch = false;
+
 if Mismatch
     flex_profile_DAM = zeros(24,1);
 else
@@ -210,7 +217,9 @@ while time_granted < Wrapper.duration
         % if Wrapper.config_data.include_helics
             Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
             Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-            Wrapper = Wrapper.get_DA_forecast('solar_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+            if flag_600_gen
+                Wrapper = Wrapper.get_DA_forecast('solar_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+            end
         % else
         %     Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         %     Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
@@ -227,12 +236,14 @@ while time_granted < Wrapper.duration
         data_idx = gen_info.data_map.columns;
         % gen_profile = dam_gen_profiles(Wrapper.forecast.wind_profile, gen_idx, data_idx); 
         VRE_wind_profile = create_dam_profile(Wrapper.forecast.wind_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
-        
-        gen_info = Wrapper.config_data.matpower_most_data.('solar_profile_info');
+        if flag_600_gen
+            gen_info = Wrapper.config_data.matpower_most_data.('solar_profile_info');
+        end
         gen_idx = gen_info.data_map.gen;
         data_idx = gen_info.data_map.columns;
-        VRE_solar_profile = create_dam_profile(Wrapper.forecast.solar_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
-        
+        if flag_600_gen
+            VRE_solar_profile = create_dam_profile(Wrapper.forecast.solar_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
+        end
         %% Adding Load Profiles from forecast %%
         load_info = Wrapper.config_data.matpower_most_data.('load_profile_info');
         load_idx = load_info.data_map.bus;
@@ -251,7 +262,9 @@ while time_granted < Wrapper.duration
         
         
         profiles = getprofiles(VRE_wind_profile); 
-        profiles = getprofiles(VRE_solar_profile, profiles);
+        if flag_600_gen
+            profiles = getprofiles(VRE_solar_profile, profiles);
+        end
         profiles = getprofiles(Load_MW_profile, profiles);
         profiles = getprofiles(Load_MVAR_profile, profiles);
         
@@ -400,6 +413,9 @@ while time_granted < Wrapper.duration
 
         % mpc_mod.branch(:,6:8) = mpc_mod.branch(:,6:8)*0.5;
         % mpc_mod.branch(7,6:8) = mpc_mod.branch(7,6:8)*3;
+
+        infgen_idx = find( mpc_mod.gen(:,9) <  mpc_mod.gen(:,10));
+        mpc_mod.gen(infgen_idx,9) = 0;
         
 
         xgd_table.colnames = { 'CommitKey' };
@@ -421,6 +437,8 @@ while time_granted < Wrapper.duration
             xgd.InitialPg = mpc_mod.gen(:, 10);
         else
             xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
+            xgd.InitialPg(Generator_index) = 0;
+            %% Generalize later %
         end
         %% Adding Ramping Constraints for dispatchable loads  %%
         for i = length(Wrapper.config_data.day_ahead_market.cosimulation_bus):-1:1
@@ -446,7 +464,7 @@ while time_granted < Wrapper.duration
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
         mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
 %         mpopt.mips.max_it = 2000;
-        mpopt = mpoption(mpopt, 'most.uc.run', 0);
+        mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
         mdo = most(mdi, mpopt);
         
         %% Storing DAM Results %%
@@ -537,7 +555,9 @@ while time_granted < Wrapper.duration
             time_granted;
             Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info',  'load_profile');
             Wrapper = Wrapper.update_VRE_from_profiles(time_granted,   'wind_profile_info',  'wind_profile');
-            Wrapper = Wrapper.update_VRE_from_profiles(time_granted,   'solar_profile_info', 'solar_profile');
+            if flag_600_gen
+                Wrapper = Wrapper.update_VRE_from_profiles(time_granted,   'solar_profile_info', 'solar_profile');
+            end
             %% Storage Profile %%
             if storage_option && Wrapper.config_data.include_day_ahead_market
                 % Add Storage back in
