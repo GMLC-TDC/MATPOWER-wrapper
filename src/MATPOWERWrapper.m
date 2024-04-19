@@ -197,8 +197,10 @@ classdef MATPOWERWrapper
        function obj = run_power_flow(obj, time)       
 
            mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.nr.max_it', 20, 'pf.enforce_q_lims', 0, 'model', obj.config_data.physics_powerflow.type);
+%            mpoptPF = mpoption('verbose', 0, 'out.all', 0, 'pf.alg', 'FDBX', 'pf.enforce_q_lims', 0);
+           solution = runpf(obj.mpc, mpoptPF); 
 
-           solution = runpf(obj.mpc, mpoptPF);  
+           fprintf('Wrapper: PF solution status at time %d: %d \n', time, solution.success);
            obj.mpc.bus(:,8:9) = solution.bus(:, 8:9);
            obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
            
@@ -257,6 +259,9 @@ classdef MATPOWERWrapper
                end
            end
            
+
+
+
            success = 0; tries = 0 ; 
            while success < 1 && tries < 5
                mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
@@ -269,6 +274,15 @@ classdef MATPOWERWrapper
                mpc_mod.branch = obj.mpc.branch;
                mpc_mod.baseMVA = obj.mpc.baseMVA;
                mpc_mod.genfuel = obj.mpc.genfuel;
+               
+               if time > obj.config_data.real_time_market.interval
+                   hour_idx = floor((time)/3600) + 1;
+                   commitment = transpose(obj.results.DAM.PG(hour_idx,2:(size(obj.mpc.gen,1)+1)));
+%                    commitment = obj.mpc.gen(:,2);
+                   ramp_gen = obj.mpc.gen(:,19)*1*obj.config_data.real_time_market.interval/3600;
+                   mpc_mod.mpc.gen(:,9) = min(obj.mpc.gen(:,9), (commitment + ramp_gen));
+                   mpc_mod.mpc.gen(:,10) = max(obj.mpc.gen(:,10), (commitment - ramp_gen));
+                end
               
                solution = rundcopf(mpc_mod, mpoptOPF); 
                success = solution.success;
