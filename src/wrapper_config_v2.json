@@ -52,14 +52,14 @@
   "real_time_market": {
     "type": "DC",
     "interval": 900, 
-    "cosimulation_bus": [],
+    "cosimulation_bus": [2],
     "transactive": true,
 	"bid_model": "poly"
   }, 
   "day_ahead_market":{
     "type": "DC",
     "interval": 86400,
-    "cosimulation_bus": [],
+    "cosimulation_bus": [2],
     "forecast_error": 10,
     "transactive": true
   },

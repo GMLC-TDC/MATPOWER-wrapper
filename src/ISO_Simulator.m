@@ -2,15 +2,22 @@ clc
 clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
-
-case_name = 'Base_v1';  %Base, Flex10, Flex20, Mis10, Mis20
+tic();
+% UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
+case_name = 'UCMis20';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
 flag_600_gen = 1;
-flag_uc = 0;
-Mismatch = 0;
-flex = 0;
+flag_uc = 1;
+Mismatch = 1;
+flex = 20;
+
+flag_reduce_gen = 0;
+flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
+gen_goal = 400; % How many generators to run with UC (<=422)
+% Ex: 0, 20: only the 20 most expensive generators can be decommitted
+% Ex: 1, 30: only the 30 smallest generators can be decommitted
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
@@ -85,15 +92,47 @@ if flag_600_gen == 1
     %% 600 Gen Case %%
     Wrapper.reserve_genId = [];
     Wrapper.mustrun_genId = [];
+    if flag_reduce_gen && flag_uc
+        reduce_list = [];
+        reduced_gens = 0;
+        for gen_idx = 1:length(Wrapper.mpc.genfuel)
+            if Wrapper.mpc.genfuel(gen_idx) ~=  "hydro"  && Wrapper.mpc.genfuel(gen_idx) ~=  "solar" && ... 
+                Wrapper.mpc.genfuel(gen_idx) ~=  "wind" && Wrapper.mpc.genfuel(gen_idx) ~=  "nuclear" 
+                if flag_reduce_option == 1
+                    reduce_list = [reduce_list;gen_idx,Wrapper.mpc.gen(gen_idx,9)];
+                else
+                    reduce_list = [reduce_list;gen_idx,Wrapper.mpc.gencost(gen_idx,6)];
+                end
+            else
+                reduced_gens = reduced_gens + 1;
+            end
+        end
+        if flag_reduce_option == 1
+            [~,reduce_index] = sort(reduce_list(:,2),'descend'); % Largest generators must run
+        else
+            [~,reduce_index] = sort(reduce_list(:,2),'ascend'); % Cheapest generators must run
+        end
+        reduce_order = reduce_list(reduce_index,1);
+        reduce_order = reduce_order(1:(length(Wrapper.mpc.gen)-reduced_gens-gen_goal));
+    end
+    if flag_uc && flag_reduce_gen
+        remaining_gen = length(reduce_list);
+    end
     for gen_idx = 1:length(Wrapper.mpc.genfuel)
         if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" ||  Wrapper.mpc.genfuel(gen_idx) ==  "coal" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
             Wrapper.reserve_genId = [Wrapper.reserve_genId gen_idx];
         end
         if Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || Wrapper.mpc.genfuel(gen_idx) ==  "solar" || ... 
-                Wrapper.mpc.genfuel(gen_idx) ==  "wind" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+                Wrapper.mpc.genfuel(gen_idx) ==  "wind" || Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" 
             Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
+        elseif flag_reduce_gen && flag_uc
+            if ismember(gen_idx,reduce_order) %Will add to must run based on preference flag_reduce_cap
+                Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
+            end
         end
-        
+    end
+    if flag_reduce_gen && flag_uc
+        remaining_gen = length(Wrapper.mpc.genfuel) - length(Wrapper.mustrun_genId);
     end
 else
     Wrapper.reserve_genId = [1:33]; %% 100 Gen case
@@ -425,8 +464,8 @@ while time_granted < Wrapper.duration
         xgd = loadxgendata(xgd_table, mpc_mod);
         must_run_idx = Wrapper.mustrun_genId; %% Nuclear + VRE
         %must_run_idx = [10:18]; %% for Test case                                                  
-%         xgd_table.data(must_run_idx) = 2;
-        
+        xgd_table.data(must_run_idx) = 2;
+        xgd = loadxgendata(xgd_table, mpc_mod);
         if flag_600_gen == 1
             xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:, 19)*1; 
         else
@@ -440,7 +479,7 @@ while time_granted < Wrapper.duration
         else
             xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
 %             xgd.InitialPg = Wrapper.results.DAM.PG(end, 2:end)';
-%             xgd.InitialPg(Generator_index) = 0;
+            xgd.InitialPg(Generator_index) = 0;
             %% Generalize later %
         end
         %% Adding Ramping Constraints for dispatchable loads  %%
@@ -464,8 +503,8 @@ while time_granted < Wrapper.duration
         end
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
-        % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
+        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
+        % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
 %         mpopt.mips.max_it = 2000;
         mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
         mdo = most(mdi, mpopt);
@@ -624,3 +663,5 @@ if Wrapper.config_data.include_helics
     helicsFederateDestroy(Wrapper.helics_data.fed)
     helics.helicsCloseLibrary()
 end
+sec=toc()
+min=sec/60
