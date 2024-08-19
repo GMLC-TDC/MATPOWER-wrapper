@@ -4,12 +4,12 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 tic();
 % UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
-case_name = 'UCMis20';  %Base, Flex10, Flex20, Mis10, Mis20
+case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
 flag_600_gen = 1;
-flag_uc = 1;
+flag_uc = 0;
 Mismatch = 1;
 flex = 20;
 
@@ -57,7 +57,7 @@ if Wrapper.config_data.include_helics
 end
 
 define_constants;
-tnext_physics_powerflow = 300+Wrapper.config_data.physics_powerflow.interval;
+tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 % tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
 tnext_day_ahead_market = 5;

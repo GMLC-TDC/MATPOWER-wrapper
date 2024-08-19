@@ -11,6 +11,11 @@
     "publications": [
         {
             "global": true,
+            "key": "DSOSim.pcc.2.pq",
+            "type": "complex"
+        },
+        {
+            "global": true,
             "key": "DSOSim.pcc.2.rt_energy.bid",
             "type": "JSON"
         },
@@ -18,14 +23,14 @@
             "global": true,
             "key": "DSOSim.pcc.2.da_energy.bid",
             "type": "JSON"
-        },
-        {
-            "global": true,
-            "key": "DSOSim.pcc.storage",
-            "type": "JSON"
         }
     ],
     "subscriptions": [
+        {
+            "required": false,
+            "key": "TransmissionSim.pcc.2.pnv",
+            "type": "complex"
+        },
         {
             "required": false,
             "key": "TransmissionSim.pcc.2.rt_energy.cleared",

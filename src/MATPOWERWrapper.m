@@ -303,8 +303,8 @@ classdef MATPOWERWrapper
                Bus_number = obj.config_data.real_time_market.cosimulation_bus(length(obj.config_data.real_time_market.cosimulation_bus)-i+1,1);
                Generator_index = size(obj.mpc.gen,1);
                solution.bus(Bus_number,3) = solution.bus(Bus_number,3) - solution.gen(Generator_index,2);
-               obj.RTM_allocations{Bus_number}.P_clear =  obj.mpc.bus(Bus_number,14); 
-               obj.RTM_allocations{Bus_number}.Q_clear =  obj.mpc.bus(Bus_number,3); 
+               obj.RTM_allocations{Bus_number}.P_clear =  solution.bus(Bus_number,14); 
+               obj.RTM_allocations{Bus_number}.Q_clear =  solution.bus(Bus_number,3); 
                
                obj.mpc.genfuel(Generator_index,:) = [];
                obj.mpc.gen(Generator_index,:) = [];
