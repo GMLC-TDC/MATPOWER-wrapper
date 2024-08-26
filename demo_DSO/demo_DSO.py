@@ -94,8 +94,8 @@ def create_helics_configuration(helics_config, filename):
     return
 
 if __name__ == "__main__":
-    # json_path = '../src/wrapper_config.json'
-    json_path = '../src/wrapper_config_v2.json'
+    json_path = '../src/wrapper_config_test.json'
+    # json_path = '../src/wrapper_config_v2.json'
     with open(json_path, 'r') as f:
         wrapper_config = json.loads(f.read())
 

@@ -1,7 +1,7 @@
 {
   "matpower_most_data": {
     "datapath": "../system_data/test_system/",
-    "case_name": "test_damcase.m",
+    "case_name": "test_damcase.json",
     "load_profile_info": {
       "filename": "2016_test_5min_load_data.csv",
       "resolution": 300,
@@ -33,6 +33,7 @@
   "include_real_time_market": true, 
   "include_day_ahead_market": true, 
   "include_helics": false, 
+  "include_storage": false,
   "physics_powerflow":{
     "type": "DC",
     "interval": 60,
@@ -48,7 +49,7 @@
   "day_ahead_market":{
     "type": "DC",
     "interval": 86400,
-    "cosimulation_bus": [2],
+    "cosimulation_bus": [],
     "forecast_error": 10,
     "transactive": true
   },

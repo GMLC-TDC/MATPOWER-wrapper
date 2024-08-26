@@ -8,10 +8,11 @@ case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
-flag_600_gen = 1;
-flag_uc = 0;
+flag_600_gen = 0;
+flag_18_gen = 1;
+flag_uc = 1;
 Mismatch = 1;
-flex = 20;
+flex = 0;
 
 flag_reduce_gen = 0;
 flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
@@ -25,6 +26,8 @@ isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 wrapper_startup;
 if flag_600_gen
     Wrapper = MATPOWERWrapper('wrapper_config_v2.json', isOctave);
+elseif flag_18_gen
+    Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 else
     Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 end
@@ -84,9 +87,16 @@ Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
+if flag_18_gen
+    max_zonal_loads = sum(max_zonal_loads);
+    max_zonal_loads =  [71590]; % Test Case Based on 2016 data
+end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
 zonal_res_req = max_zonal_loads'*7.0/100; 
+if flag_18_gen
+    zonal_res_req = max_zonal_loads'*1.0/100;
+end
 % assuming Non VRE generators to participate in reserve allocations
 if flag_600_gen == 1
     %% 600 Gen Case %%
@@ -134,12 +144,12 @@ if flag_600_gen == 1
     if flag_reduce_gen && flag_uc
         remaining_gen = length(Wrapper.mpc.genfuel) - length(Wrapper.mustrun_genId);
     end
-else
+elseif ~flag_18_gen
     Wrapper.reserve_genId = [1:33]; %% 100 Gen case
     Wrapper.mustrun_genId = [75:110]; 
+else
+    reserve_genId = [1:13]; %% Test case
 end
-% reserve_genId = [1:13]; %% Test case
-
 % assuming 5% reserve availiability from all generators
 reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100; 
 
@@ -463,7 +473,9 @@ while time_granted < Wrapper.duration
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
         xgd = loadxgendata(xgd_table, mpc_mod);
         must_run_idx = Wrapper.mustrun_genId; %% Nuclear + VRE
-        %must_run_idx = [10:18]; %% for Test case                                                  
+        if flag_18_gen
+            must_run_idx = [10:18]; %% for Test case      
+        end
         xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         if flag_600_gen == 1
@@ -504,6 +516,9 @@ while time_granted < Wrapper.duration
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
+        if flag_18_gen
+            mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','DEFAULT');
+        end
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
 %         mpopt.mips.max_it = 2000;
         mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
