@@ -93,7 +93,7 @@ def create_helics_configuration(helics_config, filename):
     return
 
 if __name__ == "__main__":
-    json_path = '../src/wrapper_config.json'
+    json_path = '../src/wrapper_config_v2.json'
     with open(json_path, 'r') as f:
         wrapper_config = json.loads(f.read())
 
@@ -182,11 +182,11 @@ if __name__ == "__main__":
     # duration = 300
     time_granted = -1
     
-    flexibility = .25
+    flexibility = 0
     flexibility_profile = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     flexibility_profile = list(map(lambda x: x * flexibility, (i for i in flexibility_profile))) ##Multiply entire flex_profile by flex
     blocks = 10
-    P_range = np.array([25, 60]) 
+    P_range = np.array([10, 20]) 
     
     while time_granted < duration:
         

@@ -19,6 +19,7 @@ classdef MATPOWERWrapper
       storage_specs = struct();
       reserve_genId = [];
       mustrun_genId = [];
+      storage = struct();
       
    end
    
@@ -214,6 +215,42 @@ classdef MATPOWERWrapper
        %% Running OPF to emulate Real Time Market %% 
        function obj = run_RT_market(obj, time)
            
+           mpc_mod = struct();
+           mpc_mod.bus = obj.mpc.bus;
+           mpc_mod.gen = obj.mpc.gen;
+           mpc_mod.gencost = obj.mpc.gencost;
+           mpc_mod.branch = obj.mpc.branch;
+           mpc_mod.baseMVA = obj.mpc.baseMVA;
+           mpc_mod.genfuel = obj.mpc.genfuel;
+           org_gen_idx = length(mpc_mod.gen);
+          
+           hour_idx = floor((time)/3600) + 1;
+           %************ Adjusting generator capacity based on ramp limits *************%
+           if time > obj.config_data.real_time_market.interval
+               commitment = transpose(obj.results.DAM.PG(hour_idx,2:(size(obj.mpc.gen,1)+1)));
+%                    commitment = obj.mpc.gen(:,2);
+               ramp_gen = obj.mpc.gen(:,19)*1*obj.config_data.real_time_market.interval/3600;
+               mpc_mod.mpc.gen(:,9) = min(obj.mpc.gen(:,9), (commitment + ramp_gen));
+               mpc_mod.mpc.gen(:,10) = max(obj.mpc.gen(:,10), (commitment - ramp_gen));
+           end
+
+           %************* Wrapper.storage_dispatches*************%
+           
+           if obj.config_data.include_storage && obj.config_data.include_day_ahead_market
+               storage_gen_idx = [];
+               storage_names = fieldnames(obj.storage.specs);
+               for idx=1:length(storage_names)
+                   stor_idx = length(mpc_mod.gen)+1;
+                   mpc_mod.gen(stor_idx,:) = obj.storage.profile.gen(idx);
+                   mpc_mod.gen(stor_idx,2) = obj.results.DAM.P_storage(hour_idx, idx+1);
+                   mpc_mod.gen(stor_idx,9) = obj.results.DAM.P_storage(hour_idx, idx+1);
+                   mpc_mod.gen(stor_idx,10) = obj.results.DAM.P_storage(hour_idx, idx+1);
+                   mpc_mod.gencost(stor_idx,:) = obj.storage.profile.gencost(idx);
+                   mpc_mod.genfuel(stor_idx,:) = obj.storage.profile.genfuel(idx);
+                   storage_gen_idx = [storage_gen_idx; stor_idx];
+               end
+           end
+
            %************* Wrapper.update_dispatchable_loads(bids)*************
            for i = 1 : length(obj.config_data.real_time_market.cosimulation_bus)
                Bus_number = obj.config_data.real_time_market.cosimulation_bus(i,1);
@@ -229,61 +266,44 @@ classdef MATPOWERWrapper
 
                Coeff = polyfit(-1*transpose(DSO_bid.Q_bid), -1*Actual_cost, 2);
                %***** Updating the unresponsive bus loads *****%
-               obj.mpc.bus(Bus_number,3) = DSO_bid.constant_MW; 
-               obj.mpc.bus(Bus_number,4) = DSO_bid.constant_MVAR; 
+               mpc_mod.bus(Bus_number,3) = DSO_bid.constant_MW; 
+               mpc_mod.bus(Bus_number,4) = DSO_bid.constant_MVAR; 
                kW_kVAR_factor = DSO_bid.constant_MW / DSO_bid.constant_MVAR;
                %***** Updating the responsive bus loads *****%
-               Generator_index = size(obj.mpc.gen,1) + 1;
-               obj.mpc.genfuel(Generator_index,:) = obj.mpc.genfuel(1,:);  %copy random genfuel entry
-               obj.mpc.gen(Generator_index,:) = 0;                             %new entry of 0's
-               obj.mpc.gen(Generator_index,1) = Bus_number;                    %set bus # 
-               obj.mpc.gen(Generator_index,5) = -1*max(DSO_bid.Q_bid)/kW_kVAR_factor; 
-               obj.mpc.gen(Generator_index,6) = 1;  
-               obj.mpc.gen(Generator_index,8) = 1;                             %gen status on
-               obj.mpc.gen(Generator_index,10) = -1*max(DSO_bid.Q_bid);        %Set reduction range
+               Generator_index = size(mpc_mod.gen,1) + 1;
+               mpc_mod.genfuel(Generator_index,:) = obj.mpc.genfuel(1,:);  %copy random genfuel entry
+               mpc_mod.gen(Generator_index,:) = 0;                             %new entry of 0's
+               mpc_mod.gen(Generator_index,1) = Bus_number;                    %set bus # 
+               mpc_mod.gen(Generator_index,5) = -1*max(DSO_bid.Q_bid)/kW_kVAR_factor; 
+               mpc_mod.gen(Generator_index,6) = 1;  
+               mpc_mod.gen(Generator_index,8) = 1;                             %gen status on
+               mpc_mod.gen(Generator_index,10) = -1*max(DSO_bid.Q_bid);        %Set reduction range
                %***** Updating the responsive bus costs *****%
-               obj.mpc.gencost(Generator_index,:) = 0;                         %new entry of 0's
+               mpc_mod.gencost(Generator_index,:) = 0;                         %new entry of 0's
                if strfind(obj.config_data.real_time_market.bid_model,"poly")
-                   obj.mpc.gencost(Generator_index,1) = 2;                  %Polynomial model
-                   obj.mpc.gencost(Generator_index,4) = 3;                  %Degree 3 polynomial
-                   obj.mpc.gencost(Generator_index,5:7) = Coeff;            %Polynomial coefficients
+                   mpc_mod.gencost(Generator_index,1) = 2;                  %Polynomial model
+                   mpc_mod.gencost(Generator_index,4) = 3;                  %Degree 3 polynomial
+                   mpc_mod.gencost(Generator_index,5:7) = Coeff;            %Polynomial coefficients
                else
-                   obj.mpc.gencost(Generator_index,1) = 1;                              %Block model
-                   obj.mpc.gencost(Generator_index,4) = length(DSO_bid.Q_bid);          %# of blocks
+                   mpc_mod.gencost(Generator_index,1) = 1;                              %Block model
+                   mpc_mod.gencost(Generator_index,4) = length(DSO_bid.Q_bid);          %# of blocks
                    [Q_reverse, idx] = sort(-1*DSO_bid.Q_bid);
                    Cost_reverse = -1*Actual_cost(idx);
                    for a = 1:length(DSO_bid.Q_bid)
-                       obj.mpc.gencost(Generator_index,3+(2*a)) = Q_reverse(a);
-                       obj.mpc.gencost(Generator_index,4+(2*a)) = Cost_reverse(a);
+                       mpc_mod.gencost(Generator_index,3+(2*a)) = Q_reverse(a);
+                       mpc_mod.gencost(Generator_index,4+(2*a)) = Cost_reverse(a);
                    end
                end
            end
            
-
-
-
            success = 0; tries = 0 ; 
            while success < 1 && tries < 5
                mpoptOPF = mpoption('verbose', 0, 'out.all', 0, 'model', obj.config_data.real_time_market.type);
-               mpc_mod = struct();
-               mpc_mod.bus = obj.mpc.bus;
-               mpc_mod.gen = obj.mpc.gen;
+
+               % Checking for infeasible generator conditions
                infgen_idx = find( mpc_mod.gen(:,9) <  mpc_mod.gen(:,10));
                mpc_mod.gen(infgen_idx,9) = 0;
-               mpc_mod.gencost = obj.mpc.gencost;
-               mpc_mod.branch = obj.mpc.branch;
-               mpc_mod.baseMVA = obj.mpc.baseMVA;
-               mpc_mod.genfuel = obj.mpc.genfuel;
-               
-               if time > obj.config_data.real_time_market.interval
-                   hour_idx = floor((time)/3600) + 1;
-                   commitment = transpose(obj.results.DAM.PG(hour_idx,2:(size(obj.mpc.gen,1)+1)));
-%                    commitment = obj.mpc.gen(:,2);
-                   ramp_gen = obj.mpc.gen(:,19)*1*obj.config_data.real_time_market.interval/3600;
-                   mpc_mod.mpc.gen(:,9) = min(obj.mpc.gen(:,9), (commitment + ramp_gen));
-                   mpc_mod.mpc.gen(:,10) = max(obj.mpc.gen(:,10), (commitment - ramp_gen));
-                end
-              
+
                solution = rundcopf(mpc_mod, mpoptOPF); 
                success = solution.success;
                tries = tries + 1;
@@ -301,31 +321,51 @@ classdef MATPOWERWrapper
            %************* Wrapper.updating Allocations (bids)*************%
            for i = 1 : length(obj.config_data.real_time_market.cosimulation_bus)
                Bus_number = obj.config_data.real_time_market.cosimulation_bus(length(obj.config_data.real_time_market.cosimulation_bus)-i+1,1);
-               Generator_index = size(obj.mpc.gen,1);
+               Generator_index = size(mpc_mod.gen,1);
                solution.bus(Bus_number,3) = solution.bus(Bus_number,3) - solution.gen(Generator_index,2);
-               obj.RTM_allocations{Bus_number}.P_clear =  obj.mpc.bus(Bus_number,14); 
-               obj.RTM_allocations{Bus_number}.Q_clear =  obj.mpc.bus(Bus_number,3); 
-               
-               obj.mpc.genfuel(Generator_index,:) = [];
-               obj.mpc.gen(Generator_index,:) = [];
-               obj.mpc.gencost(Generator_index,:) = [];
-               solution.genfuel(Generator_index,:) = [];
-               solution.gen(Generator_index,:) = [];
-               solution.gencost(Generator_index,:) = [];
+               obj.RTM_allocations{Bus_number}.P_clear =  solution.bus(Bus_number,14); 
+               obj.RTM_allocations{Bus_number}.Q_clear =  solution.bus(Bus_number,3); 
            end
-           
+          
+
            %************* Wrapper.Saving Results*************%
            if success == 1
-               obj.mpc.gen(:,2:3) = solution.gen(:, 2:3);
+               if obj.config_data.include_storage
+
+               end
+
+               obj.mpc.gen(:,2:3) = solution.gen(1:org_gen_idx, 2:3);
                obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
                if isempty(obj.results.RTM)
                    obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
                    obj.results.RTM(1).PD  = [time solution.bus(:, 3)'];
                    obj.results.RTM(1).LMP = [time solution.bus(:, 14)'];
+                   if obj.config_data.include_storage
+                       for i = 1: size(obj.storage.profile.sd_table.data, 1)
+                           if solution.gen(storage_gen_idx(i), 2) > 0
+                               SoC_storage(i, 1) =  obj.storage.profile.sd_table.data(i,1) - ((1/obj.storage.profile.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                           else
+                               SoC_storage(i, 1) =  obj.storage.profile.sd_table.data(i,1) - (obj.storage.profile.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                           end
+                       end
+                       obj.results.RTM(1).P_Storage = [time solution.gen(storage_gen_idx, 2)'];
+                       obj.results.RTM(1).SoC_storage = [time SoC_storage'];
+                   end
                else
                    obj.results.RTM.PG  = [obj.results.RTM.PG;  time solution.gen(:, 2)'];
                    obj.results.RTM.PD  = [obj.results.RTM.PD;  time solution.bus(:, 3)'];
                    obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
+                   if obj.config_data.include_storage
+                       for i = 1: size(obj.storage.profile.sd_table.data, 1)
+                           if solution.gen(storage_gen_idx(i), 2) > 0
+                               SoC_storage(i, 1) =  obj.results.RTM.SoC_storage(end,i+1) - ((1/obj.storage.profile.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                           else
+                               SoC_storage(i, 1) =  obj.results.RTM.SoC_storage(end,i+1) - (obj.storage.profile.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                           end
+                       end
+                       obj.results.RTM.P_Storage =   [obj.results.RTM.P_Storage; time solution.gen(storage_gen_idx, 2)'];
+                       obj.results.RTM.SoC_storage = [obj.results.RTM.SoC_storage; time SoC_storage'];
+                   end
                end
            else
                fprintf('Wrapper: RTM Market failed at Time %s\n', (time));

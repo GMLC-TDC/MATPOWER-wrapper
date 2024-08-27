@@ -36,7 +36,7 @@ grid on
 input_file_name = strcat(case_data.matpower_most_data.datapath, '2021_Aug_ERCOT_Gen_Mix.csv');
 gen_mix = readtable(input_file_name);
 load_data_t = readtable(strcat('../outputs/',casename,'_RTM_PD.csv'));
-total_load_t = sum(load_data_t{:, 2:end},2);
+total_load_t = sum(load_data_t{:, 2:end},2)/1000;
 
 UTC_adjust = 1.25;
 frm = find(gen_mix.Datetime == start_time + hours(UTC_adjust));
@@ -64,7 +64,7 @@ gen_dispatch = array2table(zeros(height(case_data_PG), length(gen_mix_type)),'Va
 for type_idx = 1:length(gen_mix_type)
     type = gen_mix_type(type_idx);
     gen_type_indexes = gen_idx.(type{1})+1; %% adding +1 for as the data is moved by +1 due to time 
-    gen_dispatch.(type{1}) = sum(case_data_PG{:, gen_type_indexes}, 2);
+    gen_dispatch.(type{1}) = sum(case_data_PG{:, gen_type_indexes}, 2)/1000;
     Legend{type_idx}=type{1};
 end
 
@@ -89,14 +89,14 @@ lgnd = legend({'Nuclear', 'Coal', 'Hydro', 'Solar', 'Natural Gas', 'Wind', 'Tota
 xlabel('Time')
 ylabel('Generation (MW)')
 title('MATPOWER Simulation (Aug.)')
-xlim([time_data(1), time_data(end)])
-xticks(time_data(288:288*2:end))
+% xlim([time_data(1), time_data(end)])
+% xticks(time_data(288:288*2:end))
 
 %% Figure 2
 y_actual = [];
 for k = frm : to
     x = [gen_mix.Nuclear(k), gen_mix.Coal(k), gen_mix.Hydro(k), gen_mix.Solar(k), ...
-        gen_mix.Gas_CC(k)+gen_mix.Gas(k), gen_mix.Wind(k)];
+        gen_mix.Gas_CC(k)+gen_mix.Gas(k), gen_mix.Wind(k)]/1000;
     y_actual = [y_actual; 4*x];
 end
 
@@ -113,8 +113,8 @@ lgnd = legend({'Nuclear', 'Coal', 'Hydro', 'Solar', 'Natural Gas', 'Wind', 'Tota
 xlabel('Time')
 ylabel('Generation (MW)')
 title('Actual ERCOT Dispatch (Aug.)')
-xlim([time_data(1), time_data(end)])
-xticks(time_data(288:288*2:end))
+% xlim([time_data(1), time_data(end)])
+% xticks(time_data(288:288*2:end))
 
 function val = read_json(file)
        fid = fopen(file); 

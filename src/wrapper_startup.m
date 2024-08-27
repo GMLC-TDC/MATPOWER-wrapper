@@ -34,7 +34,7 @@ run(MATPOWER_start_up_path)
 % headerName = 'C:\Users\mukh915\matHELICS\helics\include\helics_minimal.h';
 
 % helicsStartup(libraryName, headerName)
-% addpath('C:\Users\mukh915\PNNL_Softwares\matHELICS\helics\')
+addpath('C:\Users\mukh915\PNNL_Softwares\matHELICS\helics\')
 % addpath('C:\Users\jw.hastings\OneDrive - Washington State University (email.wsu.edu)\Documents\matHELICS')
 
 %% add Mosek paths

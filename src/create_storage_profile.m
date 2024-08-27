@@ -1,4 +1,4 @@
-function storage = storage_custom(storage_specs)
+function storage = create_storage_profile(storage_info, SOC)
 %EX_STORAGE  Example Storage data file for stochastic unit commitment.
 
 %   MOST
@@ -19,8 +19,13 @@ scost = 0;               %% cost/value of initial/residual stored energy
 %scost3 = 53.3333333;    %% cost/value of initial/residual stored energy
 %% generator data
 %	bus	Pg	Qg	Qmax	Qmin	Vg	mBase	status	Pmax	Pmin	Pc1	Pc2	Qc1min	Qc1max	Qc2min	Qc2max	ramp_agc	ramp_10	ramp_30	ramp_q	apf
-for i=1:length(storage_specs.ecap)
-    storage.gen(i,:) = [storage_specs.bus(i)	0	0	0	0	1	100	1	storage_specs.pcap(i)	-storage_specs.pcap(i)	0	0	0	0	0	0	0	200	200	0	0];
+
+storage_names = fieldnames(storage_info);
+for i=1:length(storage_names)
+    storage_name = storage_names{i};
+    storage.gen(i,:) = [storage_info.(storage_name).bus	0	0	0	0	1	100	1	storage_info.(storage_name).specs.pcap	-storage_info.(storage_name).specs.pcap	0	0	0	0	0	0	0	storage_info.(storage_name).specs.pcap	storage_info.(storage_name).specs.pcap	0	0];
+    storage.gencost(i,:) = [2 0	0	2	storage_info.(storage_name).cost.C0	storage_info.(storage_name).cost.C1  storage_info.(storage_name).cost.C2];
+    storage.genfuel(i,:) = {'storage'};
 end
 % storage.gen = [
 % %	1	0	0	0	0	1	100	1	pcap	-pcap	0	0	0	0	0	0	0	20	20	0	0;
@@ -51,8 +56,10 @@ storage.xgd_table.colnames = {
 											'NegativeLoadFollowReservePrice', ...
 												'NegativeLoadFollowReserveQuantity', ...
 };
-for i=1:length(storage_specs.ecap)
-    storage.xgd_table.data(i,:) = [2	1	1e-8	2*storage_specs.pcap(i)	2e-8	2*storage_specs.pcap(i)	1e-9	1e-9	1e-6	2*storage_specs.pcap(i)	1e-6	2*storage_specs.pcap(i)];
+for i=1:length(storage_names)
+    storage_name = storage_names{i};
+    storage.xgd_table.data(i,:) = [2	1	1e-8	2*storage_info.(storage_name).specs.pcap	2e-8	2*storage_info.(storage_name).specs.pcap ...
+    	                           1e-9	1e-9	1e-6	2*storage_info.(storage_name).specs.pcap	1e-6	2*storage_info.(storage_name).specs.pcap];
 end
 % storage.xgd_table.data = [
 % 	2	1	1e-8	2*pcap	2e-8	2*pcap	1e-9	1e-9	1e-6	2*pcap	1e-6	2*pcap;
@@ -79,8 +86,10 @@ storage.sd_table.colnames = {
 										    'LossFactor', ...
 											    'rho', ...
 };
-for i=1:length(storage_specs.ecap)
-    storage.sd_table.data(i,:) = [0 0   0	storage_specs.ecap(i)	scost	scost	0	storage_specs.ecap(i)	storage_specs.eff(i)	storage_specs.eff(i)	0	rho];
+for i=1:length(storage_names)
+    storage_name = storage_names{i};
+    storage.sd_table.data(i,:) = [0.5*storage_info.(storage_name).specs.ecap 0.5*storage_info.(storage_name).specs.ecap   0	storage_info.(storage_name).specs.ecap	scost	scost	0	storage_info.(storage_name).specs.ecap	...
+                                            storage_info.(storage_name).specs.eff	 storage_info.(storage_name).specs.eff	0	rho];
 end
 % storage.sd_table.data = [
 % 	0   0	0	ecap	scost	scost	0	ecap	eff	eff	0	1;
