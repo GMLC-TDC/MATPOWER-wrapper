@@ -23,11 +23,6 @@
             "global": true,
             "key": "DSOSim.pcc.2.da_energy.bid",
             "type": "JSON"
-        },
-        {
-            "global": true,
-            "key": "DSOSim.pcc.storage",
-            "type": "JSON"
         }
     ],
     "subscriptions": [

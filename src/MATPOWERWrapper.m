@@ -11,6 +11,7 @@ classdef MATPOWERWrapper
       RTM_allocations =  cell(0)
       DAM_bids =  cell(0)
       DAM_allocations =  cell(0)
+      DAM_summary = struct();
       octave
       helics_data = struct()
       profiles = struct();
@@ -221,8 +222,8 @@ classdef MATPOWERWrapper
            mpc_mod.gencost = obj.mpc.gencost;
            mpc_mod.branch = obj.mpc.branch;
            mpc_mod.baseMVA = obj.mpc.baseMVA;
-           mpc_mod.genfuel = obj.mpc.genfuel;
-           org_gen_idx = length(mpc_mod.gen);
+%            mpc_mod.genfuel = obj.mpc.genfuel;
+           org_gen_idx = height(mpc_mod.gen);
           
            hour_idx = floor((time)/3600) + 1;
            %************ Adjusting generator capacity based on ramp limits *************%
@@ -373,6 +374,187 @@ classdef MATPOWERWrapper
            end
        end
        
+      %% Running DA OPF to emulate DA Time Market %% 
+      function obj = run_DA_market(obj, flag_uc, time)
+          
+          most_profiles = [];
+          mpc_mod = obj.mpc;
+          define_constants;
+          %%% Adding Generation Profiles from forecast for VRE-based Generators %%%
+          if isfield(obj.config_data.matpower_most_data,'wind_profile_info')
+              gen_info = obj.config_data.matpower_most_data.('wind_profile_info');
+              gen_idx = gen_info.data_map.gen;
+              data_idx = gen_info.data_map.columns;
+              VRE_wind_profile = create_dam_profile(obj.forecast.wind_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
+              most_profiles = getprofiles(VRE_wind_profile, most_profiles); 
+          end
+
+          %%% Adding Generation Profiles from forecast for VRE-based Generators %%%
+          if isfield(obj.config_data.matpower_most_data,'solar_profile_info')
+              gen_info = obj.config_data.matpower_most_data.('solar_profile_info');
+              gen_idx = gen_info.data_map.gen;
+              data_idx = gen_info.data_map.columns;
+              VRE_solar_profile = create_dam_profile(Wrapper.forecast.solar_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
+              most_profiles = getprofiles(VRE_solar_profile, most_profiles); 
+          end
+
+        %%% Adding Load Profiles from forecast %%%
+        load_info = obj.config_data.matpower_most_data.('load_profile_info');
+        load_idx = load_info.data_map.bus;
+        data_idx = load_info.data_map.columns;
+        %Removing Data for Co-Simulation Bus since they will be communicated via HELICS
+        for i = 1 : length(obj.config_data.day_ahead_market.cosimulation_bus)
+            cosim_bus_number = obj.config_data.day_ahead_market.cosimulation_bus(i,1);
+            idx_cosim_bus = find(load_idx == cosim_bus_number); 
+            load_idx(idx_cosim_bus) = [];
+            data_idx(idx_cosim_bus) = [];
+        end
+        Load_MW_profile= create_dam_profile(obj.forecast.load_profile, load_idx, data_idx, CT_TBUS, PD); 
+        MVAR_MW_ratio = obj.mpc.bus(:,QD)./ obj.mpc.bus(:,PD);
+        Load_MVAR_profile = create_dam_profile(obj.forecast.load_profile, load_idx, data_idx, CT_TBUS, QD, MVAR_MW_ratio); 
+        most_profiles = getprofiles(Load_MW_profile, most_profiles);
+        most_profiles = getprofiles(Load_MVAR_profile, most_profiles);
+
+        %%% Adding Dispatchable Load Profiles from Bids %%%
+        for i = 1 : length(obj.config_data.day_ahead_market.cosimulation_bus)
+            bus_number = obj.config_data.day_ahead_market.cosimulation_bus(i,1);
+            DSO_DAM_bid = obj.DAM_bids{bus_number}; 
+            DSO_DAM_Bid_Coeff = zeros(24,3);
+            for t = 1:24
+                Actual_cost = zeros(length(DSO_DAM_bid.Q_bid(t,:)),1);
+                for k = 1:size(DSO_DAM_bid.Q_bid, 2)
+                   if k == 1
+                       Actual_cost(k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
+                   else
+                       Actual_cost(k) = Actual_cost(k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
+                   end
+                end 
+                DSO_DAM_Bid_Coeff(t,1:3) = polyfit(-1*transpose(DSO_DAM_bid.Q_bid(t,:)), -1*Actual_cost, 2);
+                DSO_DAM_RES_MAX= -1*max(DSO_DAM_bid.Q_bid, [], 2);
+            end           
+            Generator_index = size(mpc_mod.gen,1) + 1;
+            
+            % Adding the Dispatchable Load as a new Generator %
+            mpc_mod.genfuel(Generator_index, :) = {{'Dispatchable Load'; bus_number}}; 
+            mpc_mod.gen(Generator_index,:) = 0;   %new entry of 0's
+            mpc_mod.gen(Generator_index,1) = bus_number;   %set bus to 1 *Hardcoded*
+            mpc_mod.gen(Generator_index,4) = 0;% Maximum reactive power output .gen(,4)
+            mpc_mod.gen(Generator_index,5) = 0;% Minimum reactive power output .gen(,5)
+            mpc_mod.gen(Generator_index,6) = 1;   %Voltage 1 p.u.
+            mpc_mod.gen(Generator_index,8) = 1;   %gen status on
+            mpc_mod.gen(Generator_index,10) = -10000; %min generation - Initialize with Large Number
+            mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
+            mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
+            % Adding the profiles for Dispatchable Load %
+            DSO_DAM_UNRES_MW_profile = create_dam_profile(DSO_DAM_bid.constant_MW, bus_number, 1, CT_TBUS, PD);
+            most_profiles = getprofiles(DSO_DAM_UNRES_MW_profile, most_profiles);
+
+            DSO_DAM_UNRES_MVAR_profile = create_dam_profile(DSO_DAM_bid.constant_MVAR, bus_number, 1, CT_TBUS, QD);
+            most_profiles = getprofiles(DSO_DAM_UNRES_MVAR_profile, most_profiles);
+
+            DSO_RES_MW_profile = create_dam_profile(DSO_DAM_RES_MAX, Generator_index, 1, CT_TGEN, PMIN);
+            most_profiles = getprofiles(DSO_RES_MW_profile, most_profiles);
+
+            DSO_RES_C0_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,1), Generator_index, 1, CT_TGENCOST, 5);
+            DSO_RES_C1_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,2), Generator_index, 1, CT_TGENCOST, 6);
+            DSO_RES_C2_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,3), Generator_index, 1, CT_TGENCOST, 7);
+            most_profiles = getprofiles(DSO_RES_C0_profile, most_profiles);
+            most_profiles = getprofiles(DSO_RES_C1_profile, most_profiles);
+            most_profiles = getprofiles(DSO_RES_C2_profile, most_profiles);
+        end
+
+        %%%% Adding Ramping Constraints for Generators  %%%%
+        mpc_mod.gen(:, 18) = mpc_mod.gen(:,17)*60;
+        mpc_mod.gen(:, 19) = mpc_mod.gen(:,17)*60;
+        mpc_mod.gen(:, 20) = mpc_mod.gen(:,17)*60;
+        
+        xgd_table.colnames = { 'CommitKey' };
+        xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
+        xgd_table.data(obj.mustrun_genId) = 2; %% Nuclear + VRE
+        xgd = loadxgendata(xgd_table, mpc_mod);
+        xgd.PositiveLoadFollowReserveQuantity =mpc_mod.gen(:, 19); %mpc_mod.gen(:,19)*2;
+        xgd.NegativeLoadFollowReserveQuantity = xgd.PositiveLoadFollowReserveQuantity;
+
+        %%% Adding Ramping Constraints for dispatchable loads  %%%
+        for i = length(obj.config_data.day_ahead_market.cosimulation_bus):-1:1
+            dis_load_idx = size(mpc_mod.gen,1)-(i-1);
+            xgd.CommitKey(dis_load_idx) = 2;
+            xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = 10000;
+            xgd.NegativeLoadFollowReserveQuantity(dis_load_idx) = 10000;
+        end
+
+        %%%% Checking for infeasible generators PMAX < PMIN %%%%
+        infgen_idx = find( mpc_mod.gen(:,9) <  mpc_mod.gen(:,10));
+        mpc_mod.gen(infgen_idx,9) = 0;
+        
+        %%%% Setting intitial conditions %%%%
+        if time == 0
+            xgd.InitialPg = mpc_mod.gen(:, 10);
+            xgd.InitialState = 1*ones(size(mpc_mod.gen, 1),1);
+        else
+            xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
+        end
+
+
+        nt = size(most_profiles(1).values, 1);
+        if obj.config_data.include_storage
+            mdi = loadmd(mpc_mod, nt, xgd, st_data, [], most_profiles);
+        else
+            mdi = loadmd(mpc_mod, nt, xgd, [], [], most_profiles);
+        end
+        
+        for t = 1:nt
+            mdi.FixedReserves(t,1,1) = mpc_mod.reserves;
+        end
+        
+        
+        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
+        % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
+        % mpopt.mips.max_it = 2000;
+        mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
+        mdo = most(mdi, mpopt);
+
+        if mdo.results.success == 1
+            obj.DAM_summary        = most_summary(mdo);
+            curr_day  = floor(time/86400);
+            DAM_start = curr_day* 86400 + 3600; % results for first hour
+            DAM_end   = curr_day* 86400 + 86400; % results for last hour
+            DAM_time  = linspace(DAM_start, DAM_end, 24)'; 
+            if isempty(obj.results.DAM)
+                   obj.results.DAM.PG  = [DAM_time obj.DAM_summary .Pg'];
+                   obj.results.DAM.PD  = [DAM_time obj.DAM_summary .Pd'];
+                   obj.results.DAM.LMP = [DAM_time obj.DAM_summary .lamP'];
+                   obj.results.DAM.UC  = [DAM_time obj.DAM_summary .u'];
+               else
+                   obj.results.DAM.PG  = [obj.results.DAM.PG;  DAM_time obj.DAM_summary .Pg'];
+                   obj.results.DAM.PD  = [obj.results.DAM.PD;  DAM_time obj.DAM_summary .Pd'];
+                   obj.results.DAM.LMP = [obj.results.DAM.LMP; DAM_time obj.DAM_summary .lamP'];
+                   obj.results.DAM.UC  = [obj.results.DAM.UC;  DAM_time obj.DAM_summary .u'];
+            end
+            fprintf('Wrapper: Sucessfult solved DAM');
+        else
+            fprintf('Wrapper: DAM OPF Failed on attempt');
+        end
+
+
+        for i = 1 : length(obj.config_data.day_ahead_market.cosimulation_bus)   
+            Bus_number = obj.config_data.day_ahead_market.cosimulation_bus(length(obj.config_data.day_ahead_market.cosimulation_bus)-i+1,1);
+            Generator_index = size(mpc_mod.gen,1);
+            obj.DAM_allocations{Bus_number}.P_clear =  obj.DAM_summary .lamP(Bus_number,:); 
+            obj.DAM_allocations{Bus_number}.Q_clear =  obj.DAM_summary .Pg(Bus_number,:);
+            mpc_mod.genfuel(Generator_index,:) = [];
+            mpc_mod.gen(Generator_index,:) = [];
+            mpc_mod.gencost(Generator_index,:) = [];
+     	end
+
+
+      end
+
+
+
+        
+
+
        %% Preparing HELICS configuration %%
        function obj = prepare_helics_config(obj, config_file_name, SubSim)
 

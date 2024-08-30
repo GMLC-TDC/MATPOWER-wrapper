@@ -1,1 +1,45 @@
-{"coreType":"zmq","name":"TransmissionSim","period":1,"timeDelta":0,"logfile":"output.log","log_level":"warning","uninterruptible":true,"coreInit":"--federates=1","coreName":"Transmission Federate","publications":[{"key":"TransmissionSim.pcc.2.pnv","type":"complex","global":true},{"key":"TransmissionSim.pcc.2.rt_energy.cleared","type":"JSON","global":true},{"key":"TransmissionSim.pcc.2.da_energy.cleared","type":"JSON","global":true}],"subscriptions":[{"key":"DSOSim.pcc.2.pq","type":"complex","required":true},{"key":"DSOSim.pcc.2.rt_energy.bid","type":"JSON","required":true},{"key":"DSOSim.pcc.2.da_energy.bid","type":"JSON","required":true},{"key":"DSOSim.pcc.storage","type":"JSON","required":true}]}
+{
+	"coreType": "zmq",
+	"name": "TransmissionSim",
+	"period": 1,
+	"timeDelta": 0,
+	"logfile": "output.log",
+	"log_level": "warning",
+	"uninterruptible": true,
+	"coreInit": "--federates=1",
+	"coreName": "Transmission Federate",
+	"publications": [
+		{
+			"key": "TransmissionSim.pcc.2.pnv",
+			"type": "complex",
+			"global": true
+		},
+		{
+			"key": "TransmissionSim.pcc.2.rt_energy.cleared",
+			"type": "JSON",
+			"global": true
+		},
+		{
+			"key": "TransmissionSim.pcc.2.da_energy.cleared",
+			"type": "JSON",
+			"global": true
+		}
+	],
+	"subscriptions": [
+		{
+			"key": "DSOSim.pcc.2.pq",
+			"type": "complex",
+			"required": true
+		},
+		{
+			"key": "DSOSim.pcc.2.rt_energy.bid",
+			"type": "JSON",
+			"required": true
+		},
+		{
+			"key": "DSOSim.pcc.2.da_energy.bid",
+			"type": "JSON",
+			"required": true
+		}
+	]
+}

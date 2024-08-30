@@ -1,5 +1,6 @@
 import math
 import json
+import csv
 import numpy as np
 import helics as h
 import pandas as pd
@@ -93,7 +94,10 @@ def create_helics_configuration(helics_config, filename):
     return
 
 if __name__ == "__main__":
-    json_path = '../src/wrapper_config_v2.json'
+
+    json_path = '../src/wrapper_config_test.json'
+    # json_path = '../src/wrapper_config_v2.json'
+
     with open(json_path, 'r') as f:
         wrapper_config = json.loads(f.read())
 
@@ -171,13 +175,17 @@ if __name__ == "__main__":
             print('DSO: Published Storage Specifications')
             
 
-    buffer = 0  ###### Buffer to sending out data before the Operational Cycle  ######
+    buffer = 30  ###### Buffer to sending out data before the Operational Cycle  ######
     tnext_physics_powerflow = wrapper_config['physics_powerflow']['interval']-buffer
     tnext_real_time_market  = wrapper_config['real_time_market']['interval']-buffer
     #tnext_day_ahead_market  = wrapper_config['day_ahead_market']['interval']-buffer
     #tnext_physics_powerflow = 0
     #tnext_real_time_market  = 0
     tnext_day_ahead_market  = 0
+    tnext_physics_powerflow_adjust = wrapper_config['physics_powerflow']['interval'] + 1
+    tnext_real_time_market_adjust  = wrapper_config['real_time_market']['interval'] + 1
+    save_outputs = 1
+    
 
     # duration = 300
     time_granted = -1
@@ -188,16 +196,34 @@ if __name__ == "__main__":
     blocks = 10
     P_range = np.array([10, 20]) 
     
-    while time_granted < duration:
+    
+    if wrapper_config['include_day_ahead_market']:
+        final_interval = wrapper_config['day_ahead_market']['interval']
+    if wrapper_config['include_real_time_market']:
+        final_interval = wrapper_config['real_time_market']['interval']
+        rt_intervals = int(duration/wrapper_config['real_time_market']['interval'])
+        rt_index = 0
+        rt_bids_save_time: list[int] = list()
+        rt_bids_save_bus: list[int] = list()
+        rt_bids_save_P_clear: list[float] = list()
+        rt_bids_save_Q_clear: list[float] = list()
+    if wrapper_config['include_physics_powerflow']:
+        final_interval = wrapper_config['physics_powerflow']['interval']
+        pf_intervals = int(duration/wrapper_config['physics_powerflow']['interval'])
+        pf_v_save_time: list[int] = list()
+        pf_v_save_bus: list[int] = list()
+        pf_v_save_v: list[complex] = list()
+        pf_index = 0
+    while time_granted < duration-final_interval-buffer:
         
         #next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
         next_helics_time = duration
         if wrapper_config['include_day_ahead_market']:
             next_helics_time = min([tnext_day_ahead_market,next_helics_time])
         if wrapper_config['include_real_time_market']:
-            next_helics_time = min([tnext_real_time_market,next_helics_time])
+            next_helics_time = min([tnext_real_time_market,tnext_real_time_market_adjust,next_helics_time])
         if wrapper_config['include_physics_powerflow']:
-            next_helics_time = min([tnext_physics_powerflow,next_helics_time])
+            next_helics_time = min([tnext_physics_powerflow,tnext_physics_powerflow_adjust,next_helics_time])
         
         if include_helics:
             #next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -251,12 +277,14 @@ if __name__ == "__main__":
                     pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
                     status = h.helicsPublicationPublishString(pub_object, bid_raw)
                     print('DSO: Published Bids for Bus {}'.format(cosim_bus))
-                
-            tnext_day_ahead_market  = tnext_day_ahead_market + wrapper_config['day_ahead_market']['interval']-buffer
+            if time_granted < 300:
+                tnext_day_ahead_market  = tnext_day_ahead_market + wrapper_config['day_ahead_market']['interval'] - buffer
+            else:
+                tnext_day_ahead_market  = tnext_day_ahead_market + wrapper_config['day_ahead_market']['interval']
 
         ######## Real time Market Intervals ########
         if time_granted >= tnext_real_time_market and wrapper_config['include_real_time_market'] and time_granted < duration:
-            
+            print(time_granted)
             profile_time = current_time + timedelta(seconds=buffer)
             data_idx = load_profiles.index[load_profiles.index == profile_time]
             current_load_profile = load_profiles.loc[data_idx]
@@ -287,12 +315,12 @@ if __name__ == "__main__":
                     status = h.helicsPublicationPublishString(pub_object, bid_raw)
                     print('DSO: Published Bids for Bus {}'.format(cosim_bus))
                 
+
+
+            tnext_real_time_market = tnext_real_time_market + wrapper_config['real_time_market']['interval']           
+            
+        if time_granted >= tnext_real_time_market_adjust and wrapper_config['include_real_time_market'] and time_granted < duration:
             if include_helics:                    
-                time_request = time_granted+2
-                while time_granted < time_request:
-                    time_granted = h.helicsFederateRequestTime(fed, time_request)
-    
-                print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
     
                 for cosim_bus in wrapper_config['cosimulation_bus']:
                     sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.rt_energy.cleared') in key ]
@@ -300,10 +328,13 @@ if __name__ == "__main__":
                     allocation_raw = h.helicsInputGetString(sub_object)
                     allocation =  json.loads(allocation_raw)
                     print('DSO: Received cleared values {} for Bus {}'.format(allocation, cosim_bus))
-
-            tnext_real_time_market = tnext_real_time_market + wrapper_config['real_time_market']['interval']           
-            
-            
+                    rt_bids_save_time.append(time_granted+buffer-2)
+                    rt_bids_save_bus.append(cosim_bus)
+                    rt_bids_save_P_clear.append(allocation['P_clear'])
+                    rt_bids_save_Q_clear.append(allocation['Q_clear'])
+                    
+                    rt_index = rt_index + 1
+            tnext_real_time_market_adjust = tnext_real_time_market_adjust + wrapper_config['real_time_market']['interval']  
             
         ######## Power Flow Intervals ########
         if time_granted >= tnext_physics_powerflow and wrapper_config['include_physics_powerflow'] and time_granted < duration:
@@ -323,21 +354,35 @@ if __name__ == "__main__":
                 status = h.helicsPublicationPublishComplex(pub_object, current_load.real, current_load.imag)
                 print('DSO: Published {} demand for Bus {}'.format(current_load, cosim_bus))
 
-            time_request = time_granted+2
-            while time_granted < time_request:
-                time_granted = h.helicsFederateRequestTime(fed, time_request)
+            
 
-            print('DSO: Requested {}s and got Granted {}s'.format(time_request, time_granted))
+            tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow']['interval']
+            
+            
+        if time_granted >= tnext_physics_powerflow_adjust and wrapper_config['include_physics_powerflow'] and time_granted < duration:
 
             for cosim_bus in wrapper_config['cosimulation_bus']:
                 sub_key = [key for key in sub_keys  if ('pcc.' + str(cosim_bus) + '.pnv') in key ]
                 sub_object = h.helicsFederateGetSubscription(fed, sub_key[0])
                 voltage = h.helicsInputGetComplex(sub_object)
                 print('DSO: Received {} Voltage for Bus {}'.format(voltage, cosim_bus))
-
-            tnext_physics_powerflow = tnext_physics_powerflow + wrapper_config['physics_powerflow']['interval']
+                pf_v_save_time.append(time_granted+buffer-1)
+                pf_v_save_bus.append(cosim_bus)
+                pf_v_save_v.append(voltage)
+                
+                pf_index = pf_index + 1
+            tnext_physics_powerflow_adjust = tnext_physics_powerflow_adjust + wrapper_config['physics_powerflow']['interval']
 
     if include_helics:
+        if save_outputs:
+            if wrapper_config['include_real_time_market']:
+                #np.savetxt("rt_bids.csv", rt_bids_save, delimiter=",")
+                rt_bids_save = pd.DataFrame(list(zip(rt_bids_save_time,rt_bids_save_bus,rt_bids_save_P_clear,rt_bids_save_Q_clear)),columns=['time','bus','P_clear','Q_clear'])
+                rt_bids_save.to_csv("rt_bids.csv")
+            if wrapper_config['include_physics_powerflow']:
+                #np.savetxt("pf_voltages.csv", pf_v_save, delimiter=",")
+                pf_v_save = pd.DataFrame(list(zip(pf_v_save_time,pf_v_save_bus,pf_v_save_v)),columns=['time','bus','voltage'])
+                pf_v_save.to_csv("pf_voltages.csv")
         h.helicsFederateDisconnect(fed)
         h.helicsBrokerWaitForDisconnect(broker,-1)
         h.helicsCloseLibrary();

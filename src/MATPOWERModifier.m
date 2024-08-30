@@ -9,8 +9,10 @@ classdef MATPOWERModifier
        function obj = MATPOWERModifier(config_file)
            obj.MATPOWERModel = obj.read_model(config_file);
            %% Any Nan Values in Ramping are converted to InF %%
-           gen_idx = isnan(obj.MATPOWERModel.gen(:,19));
-           obj.MATPOWERModel.gen(gen_idx, 19) = 10000;
+           for col = 17:20
+               gen_idx = isnan(obj.MATPOWERModel.gen(:,col)) | isinf(obj.MATPOWERModel.gen(:,col)) ;
+               obj.MATPOWERModel.gen(gen_idx, col) = 10000;
+           end
        end
        
        %% Change the Branch Flow Limits 

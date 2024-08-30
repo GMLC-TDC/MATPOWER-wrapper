@@ -2,26 +2,22 @@ clc
 clear all
 clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
-
-case_names={'Base', 'Flex10', 'Flex20', 'Mis10', 'Mis20'};
-for run_number = 1:length(case_names)
-%case_name = 'Mis20';  %{'Base', 'Flex10', 'Flex20', 'Mis10', 'Mis20'}
-case_name = string(case_names(run_number));
+tic();
+% UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
+case_name = 'Base';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
 flag_600_gen = 1;
 flag_uc = 0;
-Mismatch = 0;
-if case_name == 'Mis10' || case_name == 'Mis20'
-    Mismatch = 1;
-end
+Mismatch = 1;
 flex = 0;
-if case_name == 'Flex10' || case_name == 'Mis10'
-    flex = 10;
-elseif case_name == 'Flex20' || case_name == 'Mis20'
-    flex = 20;
-end
+
+flag_reduce_gen = 0;
+flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
+gen_goal = 400; % How many generators to run with UC (<=422)
+% Ex: 0, 20: only the 20 most expensive generators can be decommitted
+% Ex: 1, 30: only the 30 smallest generators can be decommitted
 
 %% Check if MATLAB or OCTAVE
 isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
@@ -61,8 +57,8 @@ if Wrapper.config_data.include_helics
 end
 
 define_constants;
-tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval+5;
-tnext_real_time_market = Wrapper.config_data.real_time_market.interval+5;
+tnext_physics_powerflow = 300+Wrapper.config_data.physics_powerflow.interval;
+tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 % tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
 tnext_day_ahead_market = 5;
 
@@ -74,12 +70,11 @@ next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_
 if flag_600_gen == 1
     reduction = 0.7;
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:13, reduction); %Reduce for line limits
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(8, (1/reduction)); %vital line
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(12, (1/reduction)); %vital line
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(4, 0.95);       % 2-1
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(5, 0.95);       % 2-7
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(9, 0.95);       % 2-5
-    
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(8, 1.4); %vital line
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(12, 1.4); %vital line
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(4:7, 0.95);       % 2-1
+%     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(5, 0.91);       % 2-7
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(9:11, 0.925);       % 2-5
 else
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:8, 1);
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
@@ -91,22 +86,53 @@ res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*2.5/100; 
+zonal_res_req = max_zonal_loads'*7.0/100; 
 % assuming Non VRE generators to participate in reserve allocations
 if flag_600_gen == 1
     %% 600 Gen Case %%
     Wrapper.reserve_genId = [];
     Wrapper.mustrun_genId = [];
+    if flag_reduce_gen && flag_uc
+        reduce_list = [];
+        reduced_gens = 0;
+        for gen_idx = 1:length(Wrapper.mpc.genfuel)
+            if Wrapper.mpc.genfuel(gen_idx) ~=  "hydro"  && Wrapper.mpc.genfuel(gen_idx) ~=  "solar" && ... 
+                Wrapper.mpc.genfuel(gen_idx) ~=  "wind" && Wrapper.mpc.genfuel(gen_idx) ~=  "nuclear" 
+                if flag_reduce_option == 1
+                    reduce_list = [reduce_list;gen_idx,Wrapper.mpc.gen(gen_idx,9)];
+                else
+                    reduce_list = [reduce_list;gen_idx,Wrapper.mpc.gencost(gen_idx,6)];
+                end
+            else
+                reduced_gens = reduced_gens + 1;
+            end
+        end
+        if flag_reduce_option == 1
+            [~,reduce_index] = sort(reduce_list(:,2),'descend'); % Largest generators must run
+        else
+            [~,reduce_index] = sort(reduce_list(:,2),'ascend'); % Cheapest generators must run
+        end
+        reduce_order = reduce_list(reduce_index,1);
+        reduce_order = reduce_order(1:(length(Wrapper.mpc.gen)-reduced_gens-gen_goal));
+    end
+    if flag_uc && flag_reduce_gen
+        remaining_gen = length(reduce_list);
+    end
     for gen_idx = 1:length(Wrapper.mpc.genfuel)
-        if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" || Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || ...
-                        Wrapper.mpc.genfuel(gen_idx) ==  "coal" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+        if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" ||  Wrapper.mpc.genfuel(gen_idx) ==  "coal" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
             Wrapper.reserve_genId = [Wrapper.reserve_genId gen_idx];
         end
-        if Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" || Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || ...
-                        Wrapper.mpc.genfuel(gen_idx) ==  "solar" || Wrapper.mpc.genfuel(gen_idx) ==  "wind" || Wrapper.mpc.genfuel(gen_idx) ==  "ng" 
+        if Wrapper.mpc.genfuel(gen_idx) ==  "hydro"  || Wrapper.mpc.genfuel(gen_idx) ==  "solar" || ... 
+                Wrapper.mpc.genfuel(gen_idx) ==  "wind" || Wrapper.mpc.genfuel(gen_idx) ==  "nuclear" 
             Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
+        elseif flag_reduce_gen && flag_uc
+            if ismember(gen_idx,reduce_order) %Will add to must run based on preference flag_reduce_cap
+                Wrapper.mustrun_genId = [Wrapper.mustrun_genId gen_idx];
+            end
         end
-        
+    end
+    if flag_reduce_gen && flag_uc
+        remaining_gen = length(Wrapper.mpc.genfuel) - length(Wrapper.mustrun_genId);
     end
 else
     Wrapper.reserve_genId = [1:33]; %% 100 Gen case
@@ -115,16 +141,16 @@ end
 % reserve_genId = [1:13]; %% Test case
 
 % assuming 5% reserve availiability from all generators
-reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 7.5/100; 
+reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100; 
 
 % assuming constant price for reserves from all generators
-reserve_genP = 1*ones(length(Wrapper.reserve_genId), 1);
+reserve_genP = 15*ones(length(Wrapper.reserve_genId), 1);
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(Wrapper.reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
 bid_blocks = 5;
-price_range = [20, 40];
+price_range = [10, 20];
 flex_max = flex ; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
@@ -414,9 +440,9 @@ while time_granted < Wrapper.duration
 
         %% Adding Ramping Constraints for Generators  %%
         if flag_600_gen == 1
-            mpc_mod.gen(:, 17) = mpc_mod.gen(:, 19)*2;
-            mpc_mod.gen(:, 18) = mpc_mod.gen(:, 19)*2;
-            mpc_mod.gen(:, 20) = mpc_mod.gen(:, 19)*2;
+            mpc_mod.gen(:, 17) = mpc_mod.gen(:, 19)*1;
+            mpc_mod.gen(:, 18) = mpc_mod.gen(:, 19)*1;
+            mpc_mod.gen(:, 20) = mpc_mod.gen(:, 19)*1;
         else
             temp = mpc_mod.gen(:,17)*60;
             % mpc_mod.gen(:, 17) = temp;
@@ -439,9 +465,9 @@ while time_granted < Wrapper.duration
         must_run_idx = Wrapper.mustrun_genId; %% Nuclear + VRE
         %must_run_idx = [10:18]; %% for Test case                                                  
         xgd_table.data(must_run_idx) = 2;
-        
+        xgd = loadxgendata(xgd_table, mpc_mod);
         if flag_600_gen == 1
-            xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:, 19)*2; 
+            xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:, 19)*1; 
         else
             xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:,17)*60; %mpc_mod.gen(:,19)*2;
             xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generation
@@ -452,6 +478,7 @@ while time_granted < Wrapper.duration
             xgd.InitialPg = mpc_mod.gen(:, 10);
         else
             xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
+%             xgd.InitialPg = Wrapper.results.DAM.PG(end, 2:end)';
             xgd.InitialPg(Generator_index) = 0;
             %% Generalize later %
         end
@@ -476,9 +503,11 @@ while time_granted < Wrapper.duration
         end
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
+        
+        % mpopt.mips.max_it = 2000;
+        % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 0, 'opf.dc.solver','GLPK');
-        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
-%         mpopt.mips.max_it = 2000;
+        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI'); 
         mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
         mdo = most(mdi, mpopt);
         
@@ -636,4 +665,5 @@ if Wrapper.config_data.include_helics
     helicsFederateDestroy(Wrapper.helics_data.fed)
     helics.helicsCloseLibrary()
 end
-end
+sec=toc()
+min=sec/60

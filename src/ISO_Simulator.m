@@ -4,14 +4,15 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 tic();
 % UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
-case_name = 'UCMis20';  %Base, Flex10, Flex20, Mis10, Mis20
+case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
-flag_600_gen = 1;
-flag_uc = 1;
+flag_600_gen = 0;
+flag_18_gen = 1;
+flag_uc = 0;
 Mismatch = 1;
-flex = 20;
+flex = 0;
 
 flag_reduce_gen = 0;
 flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
@@ -25,9 +26,12 @@ isOctave = exist('OCTAVE_VERSION', 'builtin') ~= 0;
 wrapper_startup;
 if flag_600_gen
     Wrapper = MATPOWERWrapper('wrapper_config_v2.json', isOctave);
+elseif flag_18_gen
+    Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 else
     Wrapper = MATPOWERWrapper('wrapper_config.json', isOctave);
 end
+
 storage_option = Wrapper.config_data.include_storage;   %In wrapper_config
 % Wrapper = MATPOWERWrapper('wrapper_config_test.json', isOctave);
 %% Read profile and save it within a strcuture called load
@@ -57,7 +61,7 @@ if Wrapper.config_data.include_helics
 end
 
 define_constants;
-tnext_physics_powerflow = 300+Wrapper.config_data.physics_powerflow.interval;
+tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 % tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
 tnext_day_ahead_market = 5;
@@ -76,17 +80,24 @@ if flag_600_gen == 1
 %     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(5, 0.91);       % 2-7
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(9:11, 0.925);       % 2-5
 else
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:8, 1);
-    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 5);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:8, 0.5);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 3);
 end
 Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the mpc structure
 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [19826.18, 25282.32, 19747.12, 6694.77]; % Based on 2016 data
+if flag_18_gen
+    max_zonal_loads = sum(max_zonal_loads);
+    max_zonal_loads =  [71590]; % Test Case Based on 2016 data
+end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
 zonal_res_req = max_zonal_loads'*7.0/100; 
+if flag_18_gen
+    zonal_res_req = max_zonal_loads'*1.0/100;
+end
 % assuming Non VRE generators to participate in reserve allocations
 if flag_600_gen == 1
     %% 600 Gen Case %%
@@ -134,17 +145,21 @@ if flag_600_gen == 1
     if flag_reduce_gen && flag_uc
         remaining_gen = length(Wrapper.mpc.genfuel) - length(Wrapper.mustrun_genId);
     end
-else
+elseif ~flag_18_gen
     Wrapper.reserve_genId = [1:33]; %% 100 Gen case
     Wrapper.mustrun_genId = [75:110]; 
+else
+    Wrapper.reserve_genId = [1:13]; %% Test case
 end
-% reserve_genId = [1:13]; %% Test case
-
 % assuming 5% reserve availiability from all generators
-reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100; 
+% reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100; 
+reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 5/100;
 
 % assuming constant price for reserves from all generators
 reserve_genP = 15*ones(length(Wrapper.reserve_genId), 1);
+reserve_genP = 1*ones(length(Wrapper.reserve_genId), 1);
+
+
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(Wrapper.reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
@@ -251,20 +266,14 @@ while time_granted < Wrapper.duration
         if time_granted < 86400
             time_granted = 0;
         end
-        
-        
-
         fprintf('Wrapper: DA forecast at Time %s\n', datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400)))
-        % if Wrapper.config_data.include_helics
-            Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-            Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-            if flag_600_gen
-                Wrapper = Wrapper.get_DA_forecast('solar_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-            end
-        % else
-        %     Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        %     Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
-        % end
+        Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        
+        if flag_600_gen
+            Wrapper = Wrapper.get_DA_forecast('solar_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
+        end
+
 
         %% Clearing storage %%
         % if storage_option
@@ -297,12 +306,12 @@ while time_granted < Wrapper.duration
             load_idx(idx_cosim_bus) = [];
             data_idx(idx_cosim_bus) = [];
         end
-        Load_MW_profile= create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, PD); 
+        Load_MW_profile= create_dam_profile(Wrapper.forecast.load_profile*0.5, load_idx, data_idx, CT_TBUS, PD); 
         MVAR_MW_ratio = Wrapper.mpc.bus(:,QD)./ Wrapper.mpc.bus(:,PD);
         Load_MVAR_profile = create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, QD, MVAR_MW_ratio); 
         
-        
-        profiles = getprofiles(VRE_wind_profile); 
+        profiles = [];
+        profiles = getprofiles(VRE_wind_profile, profiles); 
         if flag_600_gen
             profiles = getprofiles(VRE_solar_profile, profiles);
         end
@@ -463,19 +472,22 @@ while time_granted < Wrapper.duration
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
         xgd = loadxgendata(xgd_table, mpc_mod);
         must_run_idx = Wrapper.mustrun_genId; %% Nuclear + VRE
-        %must_run_idx = [10:18]; %% for Test case                                                  
+        if flag_18_gen
+            must_run_idx = [10:18]; %% for Test case      
+        end
         xgd_table.data(must_run_idx) = 2;
         xgd = loadxgendata(xgd_table, mpc_mod);
         if flag_600_gen == 1
             xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:, 19)*1; 
         else
-            xgd.PositiveLoadFollowReserveQuantity(1:end) = mpc_mod.gen(:,17)*60; %mpc_mod.gen(:,19)*2;
+            xgd.PositiveLoadFollowReserveQuantity = mpc_mod.gen(:,17)*60; %mpc_mod.gen(:,19)*2;
             xgd.PositiveLoadFollowReserveQuantity(77:end) = 10000; %% temporarily Hard coded for VRE generation
         end 
         xgd.NegativeLoadFollowReserveQuantity = xgd.PositiveLoadFollowReserveQuantity;
 
         if time_granted == 0
             xgd.InitialPg = mpc_mod.gen(:, 10);
+            xgd.InitialState = 1*ones(size(mpc_mod.gen, 1),1);
         else
             xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
 %             xgd.InitialPg = Wrapper.results.DAM.PG(end, 2:end)';
@@ -504,6 +516,9 @@ while time_granted < Wrapper.duration
         
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
+        if flag_18_gen
+            mpopt = mpoption('verbose', 3, 'out.all', 2, 'most.dc_model', 1, 'opf.dc.solver','DEFAULT');
+        end
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
 %         mpopt.mips.max_it = 2000;
         mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
@@ -663,5 +678,6 @@ if Wrapper.config_data.include_helics
     helicsFederateDestroy(Wrapper.helics_data.fed)
     helics.helicsCloseLibrary()
 end
+
 sec=toc()
 min=sec/60
