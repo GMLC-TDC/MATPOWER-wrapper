@@ -8,10 +8,10 @@ case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
-flag_600_gen = 0;
-flag_18_gen = 1;
+flag_600_gen = 1;
+flag_18_gen = 0;
 flag_uc = 0;
-Mismatch = 1;
+Mismatch = 0;
 flex = 0;
 
 flag_reduce_gen = 0;

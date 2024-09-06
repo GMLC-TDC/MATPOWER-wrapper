@@ -1,0 +1,10 @@
+clc
+clear all
+pf = 0.85;
+
+mpc = loadcase('test_damcase.m');
+mpc.bus(:,4) = mpc.bus(:,3).*pf;
+str = jsonencode (mpc);
+           fid = fopen('test_damcase.json', 'w'); 
+           fwrite(fid, str);
+           fclose(fid);

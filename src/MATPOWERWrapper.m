@@ -492,7 +492,7 @@ classdef MATPOWERWrapper
             xgd.InitialPg = mpc_mod.gen(:, 10);
             xgd.InitialState = 1*ones(size(mpc_mod.gen, 1),1);
         else
-            xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
+            xgd.InitialPg = obj.results.RTM.PG(end, 2:end)';
         end
 
 

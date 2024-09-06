@@ -5,11 +5,11 @@ warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 tic();
 % UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
 case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
-DAM_plot_option = 1;
+DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
-flag_uc = 0;
-Mismatch = 1;
+flag_uc = 1;
+Mismatch = 0;
 flex = 0;
 
 
@@ -58,12 +58,12 @@ Wrapper =  Wrapper.update_model(); % Do this to get the new limits into the the 
 %% Adding Zonal Reserves %%
 res_zones = Wrapper.mpc.bus(:, 11);
 max_zonal_loads =  [71590]; % Test Case Based on 2016 data
-% Assuming reserve requirement to be 2 % of peak load
+% Assuming reserve requirement to be 7 % of peak load
 zonal_res_req = max_zonal_loads'*7.0/100; 
 
 % assuming Non VRE generators to participate in reserve allocations
 Wrapper.reserve_genId = [1:13]; %% Test case
-% assuming 5% reserve availiability from all generators
+% assuming 10% reserve availiability from all generators
 reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 10/100;
 % assuming constant price for reserves from all generators
 reserve_genP = 15*ones(length(Wrapper.reserve_genId), 1);
@@ -122,8 +122,12 @@ while time_granted < Wrapper.duration
     %% *************************************************************
     if (time_granted >= tnext_physics_powerflow) && (Wrapper.config_data.include_physics_powerflow)     
         Wrapper = Wrapper.update_loads_from_profiles(time_granted, 'load_profile_info', 'load_profile');
-        Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
-        Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'solar_profile_info', 'solar_profile');
+        if isfield(Wrapper.profiles,'wind_profile')
+            Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'wind_profile_info', 'wind_profile');
+        end
+        if isfield(Wrapper.profiles,'solar_profile')
+            Wrapper = Wrapper.update_VRE_from_profiles(time_granted, 'solar_profile_info', 'solar_profile');
+        end
         % Collect measurements from distribution networks
         if Wrapper.config_data.include_helics  
             Wrapper = Wrapper.get_loads_from_helics();
