@@ -10,7 +10,7 @@ stor = struct();
 stor.state = 0;
 flag_uc = 1;
 Mismatch = 0;
-flex = 0;
+flex = 5;
 
 
 %% Check if MATLAB or OCTAVE
@@ -68,13 +68,14 @@ reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 10/100;
 % assuming constant price for reserves from all generators
 reserve_genP = 15*ones(length(Wrapper.reserve_genId), 1);
 
+mustrun_genId = [10:18]; %% Nuclear + VRE: Hardcoded for Test System 
 
 Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.add_zonal_reserves(Wrapper.reserve_genId, reserve_genQ, reserve_genP, zonal_res_req);
 Wrapper =  Wrapper.update_model(); % Do this to get reserves into the the mpc structure
 
 %% Default Bid Configurations for Wrapper if HELICS is not Used. %%
-bid_blocks = 5;
-price_range = [10, 20];
+bid_blocks = 10;
+price_range = [10, 50];
 flex_max = flex ; % Defines maximum flexibility as a % of total load
 if ~isOctave
   flex_profile = unifrnd(0,flex_max,[24,1])/100;
@@ -177,8 +178,17 @@ while time_granted < Wrapper.duration
         else
                 Wrapper = Wrapper.get_DAM_bids_from_wrapper(time_granted, flex_profile_DAM, price_range, bid_blocks);
         end
+
+        %%%%%%%%%%%%%%%%%%%%%%% Adding storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        if Wrapper.config_data.include_storage
+            if Wrapper.config_data.include_helics
+                Wrapper = Wrapper.get_storage_from_helics;
+            else
+                Wrapper.storage.storage_specs = read_json("storage_config.json");
+            end
+        end
             
-        Wrapper.mustrun_genId = [10:18]; ; %% Nuclear + VRE        
+        Wrapper.mustrun_genId = mustrun_genId; %% Nuclear + VRE: Hardcoded for Test System     
         fprintf('Wrapper: Running DA Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
         Wrapper = Wrapper.run_DA_market(flag_uc, time_granted);
 
@@ -215,19 +225,7 @@ while time_granted < Wrapper.duration
         
     end
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%% Create Storage Profile %%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if storage_option && Wrapper.config_data.include_day_ahead_market
-        DA_RT_ratio = 3600 / Wrapper.config_data.real_time_market.interval;
-        RT_intervals = (size(Wrapper.results.DAM.PG,1)*DA_RT_ratio-1);
-        storage_profile = zeros(length(st_data.UnitIdx),RT_intervals);
-        for i=1:length(st_data.UnitIdx)
-            for a = 1:RT_intervals
-                storage_profile(i,a) = Wrapper.results.DAM.PG(floor((a-1)/DA_RT_ratio)+1,st_data.UnitIdx(i)+1);
-            end
-        end
-    end
+
 
     %% *************************************************************
     %% Running Real Time Energy Imbalance Market
@@ -245,25 +243,7 @@ while time_granted < Wrapper.duration
             end
         
 
-            %% Storage Profile %%
-            if storage_option && Wrapper.config_data.include_day_ahead_market
-                % Add Storage back in
-                Wrapper.mpc.gen(st_data.UnitIdx,:) = stor.gen;
-                Wrapper.mpc.gencost(st_data.UnitIdx,:) = stor.gencost;
-                Wrapper.mpc.genfuel(st_data.UnitIdx,:) = stor.genfuel;
-                
-                for i=1:length(st_data.UnitIdx)
-                    if mod(time_granted, 86400) ~= 0
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),2) = storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval);
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),9) = storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval);
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),10)= storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval);
-                    else
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),2) = storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval-1);
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),9) = storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval-1);
-                        Wrapper.mpc.gen(st_data.UnitIdx(i),10)= storage_profile(i,time_granted/Wrapper.config_data.real_time_market.interval-1);
-                    end
-                end
-            end
+
             %%%%%%%%%%%%%%%%%%%%%
             
             if isOctave

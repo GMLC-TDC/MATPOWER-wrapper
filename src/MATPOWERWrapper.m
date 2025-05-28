@@ -17,10 +17,10 @@ classdef MATPOWERWrapper
       profiles = struct();
       forecast= struct();
       results =  struct('PF', 1,'RTM', {},'DAM', {});
-      storage_specs = struct();
       reserve_genId = [];
       mustrun_genId = [];
       storage = struct();
+      storage_profile = [];
       
    end
    
@@ -235,22 +235,25 @@ classdef MATPOWERWrapper
                mpc_mod.mpc.gen(:,10) = max(obj.mpc.gen(:,10), (commitment - ramp_gen));
            end
 
-           %************* Wrapper.storage_dispatches*************%
-           
-           if obj.config_data.include_storage && obj.config_data.include_day_ahead_market
-               storage_gen_idx = [];
-               storage_names = fieldnames(obj.storage.specs);
-               for idx=1:length(storage_names)
-                   stor_idx = length(mpc_mod.gen)+1;
-                   mpc_mod.gen(stor_idx,:) = obj.storage.profile.gen(idx);
-                   mpc_mod.gen(stor_idx,2) = obj.results.DAM.P_storage(hour_idx, idx+1);
-                   mpc_mod.gen(stor_idx,9) = obj.results.DAM.P_storage(hour_idx, idx+1);
-                   mpc_mod.gen(stor_idx,10) = obj.results.DAM.P_storage(hour_idx, idx+1);
-                   mpc_mod.gencost(stor_idx,:) = obj.storage.profile.gencost(idx);
-                   mpc_mod.genfuel(stor_idx,:) = obj.storage.profile.genfuel(idx);
-                   storage_gen_idx = [storage_gen_idx; stor_idx];
-               end
-           end
+           %************* Wrapper Integrate Storage *************%
+            if obj.config_data.include_storage && obj.config_data.include_day_ahead_market
+                % Add Storage back in
+                st_data = obj.storage.st_data;
+                mpc_mod.gen(st_data.UnitIdx,:) = obj.storage.gen;
+                mpc_mod.gencost(st_data.UnitIdx,:) = obj.storage.gencost;
+                mpc_mod.genfuel(st_data.UnitIdx,:) = obj.storage.genfuel;
+                for i=1:length(st_data.UnitIdx)
+                    if mod(time, 86400) ~= 0
+                        mpc_mod.gen(st_data.UnitIdx(i),2) = obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval);
+                        mpc_mod.gen(st_data.UnitIdx(i),9) = obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval);
+                        mpc_mod.gen(st_data.UnitIdx(i),10)= obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval);
+                    else
+                        mpc_mod.gen(st_data.UnitIdx(i),2) = obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval-1);
+                        mpc_mod.gen(st_data.UnitIdx(i),9) = obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval-1);
+                        mpc_mod.gen(st_data.UnitIdx(i),10)= obj.storage.DAM_profile(i,time/obj.config_data.real_time_market.interval-1);
+                    end
+                end
+            end
 
            %************* Wrapper.update_dispatchable_loads(bids)*************
            for i = 1 : length(obj.config_data.real_time_market.cosimulation_bus)
@@ -334,38 +337,44 @@ classdef MATPOWERWrapper
                if obj.config_data.include_storage
 
                end
-
                obj.mpc.gen(:,2:3) = solution.gen(1:org_gen_idx, 2:3);
                obj.mpc.bus(:,8:17) = solution.bus(:, 8:17);
                if isempty(obj.results.RTM)
                    obj.results.RTM(1).PG  = [time solution.gen(:, 2)'];
                    obj.results.RTM(1).PD  = [time solution.bus(:, 3)'];
                    obj.results.RTM(1).LMP = [time solution.bus(:, 14)'];
+                   %********** Storing Storage Results from RTM **********%
                    if obj.config_data.include_storage
-                       for i = 1: size(obj.storage.profile.sd_table.data, 1)
+                       storage_gen_idx =  obj.storage.st_data.UnitIdx;
+                       for i = 1: size(obj.storage.sd_table.data, 1)
                            if solution.gen(storage_gen_idx(i), 2) > 0
-                               SoC_storage(i, 1) =  obj.storage.profile.sd_table.data(i,1) - ((1/obj.storage.profile.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                               % Capture SoC when storage discharging
+                               Storage_SOC(i, 1) =  obj.storage.sd_table.data(i,1) - ((1/obj.storage.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
                            else
-                               SoC_storage(i, 1) =  obj.storage.profile.sd_table.data(i,1) - (obj.storage.profile.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                               % Capture SoC when storage charging
+                               Storage_SOC(i, 1) =  obj.storage.sd_table.data(i,1) - (obj.storage.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
                            end
                        end
-                       obj.results.RTM(1).P_Storage = [time solution.gen(storage_gen_idx, 2)'];
-                       obj.results.RTM(1).SoC_storage = [time SoC_storage'];
+                       obj.results.RTM(1).Storage_Pg = [time solution.gen(storage_gen_idx, 2)'];
+                       obj.results.RTM(1).Storage_SOC = [time Storage_SOC'];
                    end
                else
                    obj.results.RTM.PG  = [obj.results.RTM.PG;  time solution.gen(:, 2)'];
                    obj.results.RTM.PD  = [obj.results.RTM.PD;  time solution.bus(:, 3)'];
                    obj.results.RTM.LMP = [obj.results.RTM.LMP; time solution.bus(:, 14)'];
                    if obj.config_data.include_storage
-                       for i = 1: size(obj.storage.profile.sd_table.data, 1)
+                       storage_gen_idx =  obj.storage.st_data.UnitIdx;
+                       for i = 1: size(obj.storage.sd_table.data, 1)
                            if solution.gen(storage_gen_idx(i), 2) > 0
-                               SoC_storage(i, 1) =  obj.results.RTM.SoC_storage(end,i+1) - ((1/obj.storage.profile.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                               % Capture SoC when storage discharging
+                               Storage_SOC(i, 1) =  obj.results.RTM.Storage_SOC(end,i+1) - ((1/obj.storage.sd_table.data(i,10)).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
                            else
-                               SoC_storage(i, 1) =  obj.results.RTM.SoC_storage(end,i+1) - (obj.storage.profile.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
+                               % Capture SoC when storage charging
+                               Storage_SOC(i, 1) =  obj.results.RTM.Storage_SOC(end,i+1) - (obj.storage.sd_table.data(i,10).*solution.gen(storage_gen_idx(i), 2)*obj.config_data.real_time_market.interval/3600);
                            end
                        end
-                       obj.results.RTM.P_Storage =   [obj.results.RTM.P_Storage; time solution.gen(storage_gen_idx, 2)'];
-                       obj.results.RTM.SoC_storage = [obj.results.RTM.SoC_storage; time SoC_storage'];
+                       obj.results.RTM.Storage_Pg =   [obj.results.RTM.Storage_Pg; time solution.gen(storage_gen_idx, 2)'];
+                       obj.results.RTM.Storage_SOC = [obj.results.RTM.Storage_SOC; time Storage_SOC'];
                    end
                end
            else
@@ -396,6 +405,19 @@ classdef MATPOWERWrapper
               data_idx = gen_info.data_map.columns;
               VRE_solar_profile = create_dam_profile(Wrapper.forecast.solar_profile, gen_idx, data_idx, CT_TGEN, PMAX); 
               most_profiles = getprofiles(VRE_solar_profile, most_profiles); 
+          end
+
+          %Detect and remove existing storage
+          if obj.config_data.include_storage
+            %Add new storage
+            storage_data = create_storage_profile(obj.storage.storage_specs);
+            [~,mpc_mod,~,st_data] = addstorage(storage_data,mpc_mod);
+            obj.storage.st_data = st_data;
+            obj.storage.sd_table = storage_data.sd_table;
+            obj.storage.gen = mpc_mod.gen(st_data.UnitIdx,:);
+            obj.storage.gencost = mpc_mod.gencost(st_data.UnitIdx,:);
+            obj.storage.genfuel = mpc_mod.genfuel(st_data.UnitIdx,:);
+            obj.storage.state = 1;
           end
 
         %%% Adding Load Profiles from forecast %%%
@@ -443,8 +465,14 @@ classdef MATPOWERWrapper
             mpc_mod.gen(Generator_index,6) = 1;   %Voltage 1 p.u.
             mpc_mod.gen(Generator_index,8) = 1;   %gen status on
             mpc_mod.gen(Generator_index,10) = -10000; %min generation - Initialize with Large Number
+            mpc_mod.gen(Generator_index,17) = 10000; %min generation - Initialize with Large Number
             mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
             mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
+            % Adding rows to the reserves for matrix dimensions %
+            mpc_mod.reserves.zones = [mpc_mod.reserves.zones 0];
+            mpc_mod.reserves.qty = [mpc_mod.reserves.qty; 0];
+            mpc_mod.reserves.cost = [mpc_mod.reserves.cost; 0];
+
             % Adding the profiles for Dispatchable Load %
             DSO_DAM_UNRES_MW_profile = create_dam_profile(DSO_DAM_bid.constant_MW, bus_number, 1, CT_TBUS, PD);
             most_profiles = getprofiles(DSO_DAM_UNRES_MW_profile, most_profiles);
@@ -464,9 +492,9 @@ classdef MATPOWERWrapper
         end
 
         %%%% Adding Ramping Constraints for Generators  %%%%
-        mpc_mod.gen(:, 18) = mpc_mod.gen(:,17)*60;
-        mpc_mod.gen(:, 19) = mpc_mod.gen(:,17)*60;
-        mpc_mod.gen(:, 20) = mpc_mod.gen(:,17)*60;
+        mpc_mod.gen(:, 18) = mpc_mod.gen(:,17)*6;
+        mpc_mod.gen(:, 19) = mpc_mod.gen(:,17)*6;
+        mpc_mod.gen(:, 20) = mpc_mod.gen(:,17)*6;
         
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
@@ -479,8 +507,8 @@ classdef MATPOWERWrapper
         for i = length(obj.config_data.day_ahead_market.cosimulation_bus):-1:1
             dis_load_idx = size(mpc_mod.gen,1)-(i-1);
             xgd.CommitKey(dis_load_idx) = 2;
-            xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = 10000;
-            xgd.NegativeLoadFollowReserveQuantity(dis_load_idx) = 10000;
+            xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = mpc_mod.gen(dis_load_idx, 19);
+            xgd.NegativeLoadFollowReserveQuantity(dis_load_idx) = mpc_mod.gen(dis_load_idx, 19);
         end
 
         %%%% Checking for infeasible generators PMAX < PMIN %%%%
@@ -508,7 +536,7 @@ classdef MATPOWERWrapper
         end
         
         
-        mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
+        mpopt = mpoption('verbose', 3, 'out.all', 1, 'most.dc_model', 1, 'opf.dc.solver','GUROBI');
         % mpopt = mpoption('verbose', 1, 'out.all', 1, 'most.dc_model', 1);
         % mpopt.mips.max_it = 2000;
         mpopt = mpoption(mpopt, 'most.uc.run', flag_uc);
@@ -521,22 +549,30 @@ classdef MATPOWERWrapper
             DAM_end   = curr_day* 86400 + 86400; % results for last hour
             DAM_time  = linspace(DAM_start, DAM_end, 24)'; 
             if isempty(obj.results.DAM)
-                   obj.results.DAM.PG  = [DAM_time obj.DAM_summary .Pg'];
-                   obj.results.DAM.PD  = [DAM_time obj.DAM_summary .Pd'];
-                   obj.results.DAM.LMP = [DAM_time obj.DAM_summary .lamP'];
-                   obj.results.DAM.UC  = [DAM_time obj.DAM_summary .u'];
+                   obj.results.DAM.PG  = [DAM_time obj.DAM_summary.Pg'];
+                   obj.results.DAM.PD  = [DAM_time obj.DAM_summary.Pd'];
+                   obj.results.DAM.LMP = [DAM_time obj.DAM_summary.lamP'];
+                   obj.results.DAM.UC  = [DAM_time obj.DAM_summary.u'];
+                   if obj.config_data.include_storage
+                       obj.results.DAM.Storage_SOC  = [DAM_time obj.DAM_summary.SoC'];
+                       obj.results.DAM.Storage_Pg  = [DAM_time obj.DAM_summary.Pg(st_data.UnitIdx,:)'];
+                   end
+
                else
                    obj.results.DAM.PG  = [obj.results.DAM.PG;  DAM_time obj.DAM_summary .Pg'];
                    obj.results.DAM.PD  = [obj.results.DAM.PD;  DAM_time obj.DAM_summary .Pd'];
                    obj.results.DAM.LMP = [obj.results.DAM.LMP; DAM_time obj.DAM_summary .lamP'];
                    obj.results.DAM.UC  = [obj.results.DAM.UC;  DAM_time obj.DAM_summary .u'];
+                   if obj.config_data.include_storage
+                       obj.results.DAM.Storage_SOC  = [obj.results.DAM.Storage_SOC; DAM_time obj.DAM_summary.SoC'];
+                       obj.results.DAM.Storage_Pg  = [obj.results.DAM.Storage_Pg; DAM_time  obj.DAM_summary.Pg(st_data.UnitIdx,:)'];
+                   end
             end
             fprintf('Wrapper: Sucessfult solved DAM');
         else
             fprintf('Wrapper: DAM OPF Failed on attempt');
         end
-
-
+        %%%% Saving DAM Allocations for CoSimulation Buses %%%%
         for i = 1 : length(obj.config_data.day_ahead_market.cosimulation_bus)   
             Bus_number = obj.config_data.day_ahead_market.cosimulation_bus(length(obj.config_data.day_ahead_market.cosimulation_bus)-i+1,1);
             Generator_index = size(mpc_mod.gen,1);
@@ -545,14 +581,22 @@ classdef MATPOWERWrapper
             mpc_mod.genfuel(Generator_index,:) = [];
             mpc_mod.gen(Generator_index,:) = [];
             mpc_mod.gencost(Generator_index,:) = [];
-     	end
+        end
 
-
-      end
-
-
+        %%%%%%%%%%%%%%%%%% Create Storage Profile %%%%%%%%%%%%%%%%%%%%%%
+        if obj.config_data.include_storage && obj.config_data.include_day_ahead_market
+            DA_RT_ratio = 3600 / obj.config_data.real_time_market.interval;
+            RT_intervals = (size(obj.results.DAM.PG,1)*DA_RT_ratio-1);
+            obj.storage_profile = zeros(length(st_data.UnitIdx),RT_intervals);
+            for i=1:length(st_data.UnitIdx)
+                for a = 1:RT_intervals
+                    obj.storage.DAM_profile(i,a) = obj.results.DAM.PG(floor((a-1)/DA_RT_ratio)+1,st_data.UnitIdx(i)+1);
+                end
+            end
+        end
 
         
+      end
 
 
        %% Preparing HELICS configuration %%
@@ -668,7 +712,7 @@ classdef MATPOWERWrapper
            sub_object = helicsFederateGetSubscription(obj.helics_data.fed, obj.helics_data.sub_keys{subkey_idx});
            helicsInputGetString(sub_object);    %Intentionally unassigned
            raw_specs = helicsInputGetString(sub_object);
-           obj.storage_specs = jsondecode(raw_specs);
+           obj.storage.storage_specs = jsondecode(raw_specs);
        end
 
        %% Updating loads from Cosimulation 
