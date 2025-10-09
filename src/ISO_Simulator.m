@@ -94,7 +94,7 @@ if flag_18_gen
 end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*7.0/100; 
+zonal_res_req = max_zonal_loads'*5.0/100; 
 if flag_18_gen
     zonal_res_req = max_zonal_loads'*1.0/100;
 end
@@ -153,7 +153,7 @@ else
 end
 % assuming 5% reserve availiability from all generators
 % reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100; 
-reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 5/100;
+reserve_genQ = Wrapper.mpc.gen(Wrapper.reserve_genId, 9)* 15/100;
 
 % assuming constant price for reserves from all generators
 reserve_genP = 15*ones(length(Wrapper.reserve_genId), 1);
@@ -489,13 +489,23 @@ while time_granted < Wrapper.duration
             xgd.InitialPg = mpc_mod.gen(:, 10);
             xgd.InitialState = 1*ones(size(mpc_mod.gen, 1),1);
         else
-            xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
-%             xgd.InitialPg = Wrapper.results.DAM.PG(end, 2:end)';
-            xgd.InitialPg(Generator_index) = 0;
+%             xgd.InitialPg = Wrapper.results.RTM.PG(end, 2:end)';
+            xgd.InitialPg = Wrapper.results.DAM.PG(end, 2:end)';
+%             for i = 1 : length(Wrapper.config_data.day_ahead_market.cosimulation_bus)
+%                 generator_index = size(mpc_mod.gen,1) - (i-1);
+%                 dis_load_idx = size(mpc_mod.gen,1)-(i-1);
+%                 xgd.InitialPg(generator_index) = 0;
+%             end
             %% Generalize later %
         end
         %% Adding Ramping Constraints for dispatchable loads  %%
-        for i = length(Wrapper.config_data.day_ahead_market.cosimulation_bus):-1:1
+%         for i = length(Wrapper.config_data.day_ahead_market.cosimulation_bus):-1:1
+%             dis_load_idx = size(mpc_mod.gen,1)-(i-1);
+%             xgd.CommitKey(dis_load_idx) = 2;
+%             xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = 20000;
+%             xgd.NegativeLoadFollowReserveQuantity(dis_load_idx) = 20000;
+%         end
+        for i = 1 : length(Wrapper.config_data.day_ahead_market.cosimulation_bus)
             dis_load_idx = size(mpc_mod.gen,1)-(i-1);
             xgd.CommitKey(dis_load_idx) = 2;
             xgd.PositiveLoadFollowReserveQuantity(dis_load_idx) = 20000;

@@ -38,28 +38,28 @@
   "include_load_uncertainty": false,
   "include_reserve_requirements": false,
   "include_line_limits": true,
-  "include_physics_powerflow": true,
+  "include_physics_powerflow": false,
   "include_real_time_market": true, 
-  "include_day_ahead_market": false, 
-  "include_helics": true,
+  "include_day_ahead_market": true, 
+  "include_helics": false,
   "include_storage": false,
-  "cosimulation_bus": [2],
+  "cosimulation_bus": [],
   "physics_powerflow":{
     "type": "DC",
     "interval": 300,
-    "cosimulation_bus": [2]
+    "cosimulation_bus": []
   },
   "real_time_market": {
     "type": "DC",
     "interval": 900, 
-    "cosimulation_bus": [2],
+    "cosimulation_bus": [],
     "transactive": true,
 	"bid_model": "poly"
   }, 
   "day_ahead_market":{
     "type": "DC",
     "interval": 86400,
-    "cosimulation_bus": [2],
+    "cosimulation_bus": [],
     "forecast_error": 10,
     "transactive": true
   },
