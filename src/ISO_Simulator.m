@@ -56,7 +56,7 @@ if Wrapper.config_data.include_helics
        import helics.*
     end
                
-    Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSOSim'); 
+    Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSO_EV_sim'); 
     Wrapper = Wrapper.start_helics_federate('helics_config.json');
 end
 
@@ -64,7 +64,7 @@ define_constants;
 tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 % tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
-tnext_day_ahead_market = 5;
+tnext_day_ahead_market = 2;
 
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -94,7 +94,7 @@ if flag_18_gen
 end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*5.0/100; 
+zonal_res_req = max_zonal_loads'*2.0/100; 
 if flag_18_gen
     zonal_res_req = max_zonal_loads'*1.0/100;
 end
@@ -306,7 +306,7 @@ while time_granted < Wrapper.duration
             load_idx(idx_cosim_bus) = [];
             data_idx(idx_cosim_bus) = [];
         end
-        Load_MW_profile= create_dam_profile(Wrapper.forecast.load_profile*0.5, load_idx, data_idx, CT_TBUS, PD); 
+        Load_MW_profile= create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, PD); 
         MVAR_MW_ratio = Wrapper.mpc.bus(:,QD)./ Wrapper.mpc.bus(:,PD);
         Load_MVAR_profile = create_dam_profile(Wrapper.forecast.load_profile, load_idx, data_idx, CT_TBUS, QD, MVAR_MW_ratio); 
         
@@ -402,9 +402,10 @@ while time_granted < Wrapper.duration
             mpc_mod.gen(Generator_index,6) = 1;   %Voltage 1 p.u.
             mpc_mod.gen(Generator_index,8) = 1;   %gen status on
             mpc_mod.gen(Generator_index,10) = -10000; %min generation - Initialize with Large Number
+            mpc_mod.gen(Generator_index,19) = 10000;  
             mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
             mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
-
+            
             %%% Adding the profiles for Dispatchable Load %%%
             
             DSO_DAM_UNRES_MW_profile = create_dam_profile(DSO_DAM_bid.constant_MW, bus_number, 1, CT_TBUS, PD);
@@ -467,7 +468,6 @@ while time_granted < Wrapper.duration
         infgen_idx = find( mpc_mod.gen(:,9) <  mpc_mod.gen(:,10));
         mpc_mod.gen(infgen_idx,9) = 0;
         
-
         xgd_table.colnames = { 'CommitKey' };
         xgd_table.data = 1*ones(size(mpc_mod.gen, 1),1);
         xgd = loadxgendata(xgd_table, mpc_mod);
@@ -590,6 +590,12 @@ while time_granted < Wrapper.duration
             plot(time, ms.Pd,'-','LineWidth',1.5)
             a =1;
         end
+
+        if Wrapper.config_data.include_helics
+            Wrapper = Wrapper.send_DA_allocations_to_helics();
+        end
+
+
         if tnext_day_ahead_market < 86400
             tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
         else

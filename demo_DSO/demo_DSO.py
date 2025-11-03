@@ -95,8 +95,8 @@ def create_helics_configuration(helics_config, filename):
 
 if __name__ == "__main__":
 
-    json_path = '../src/wrapper_config_test.json'
-    # json_path = '../src/wrapper_config_v2.json'
+    # json_path = '../src/wrapper_config_test.json'
+    json_path = '../src/wrapper_config_v2.json'
 
     with open(json_path, 'r') as f:
         wrapper_config = json.loads(f.read())
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     end_date   = datetime.strptime(wrapper_config['end_time'], '%Y-%m-%d %H:%M:%S')
     duration   = (end_date - start_date).total_seconds()
     include_helics = wrapper_config['include_helics']
-
+    # include_helics = False
     ##### Getting Load Profiles from input Matpower data #####
     load_profiles = get_load_profiles(wrapper_config)
 
@@ -214,6 +214,7 @@ if __name__ == "__main__":
         pf_v_save_bus: list[int] = list()
         pf_v_save_v: list[complex] = list()
         pf_index = 0
+        
     while time_granted < duration-final_interval-buffer:
         
         #next_helics_time = min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -250,7 +251,8 @@ if __name__ == "__main__":
             DAM_end = DAM_start + timedelta(seconds = wrapper_config['day_ahead_market']['interval'] - 60)
             #DAM_end_idx = load_profiles.index[load_profiles.index == DAM_end]
             DAM_profile_full = load_profiles.loc[DAM_start:DAM_end]
-            DAM_profile = DAM_profile_full.resample('3600S').sum() / 60
+            # DAM_profile = DAM_profile_full.resample('3600S').sum() / 60
+            DAM_profile = DAM_profile_full.resample('3600S').mean() 
             for cosim_bus in wrapper_config['cosimulation_bus']:
                 load_data = DAM_profile.to_numpy()
                 MW_MVAR_factor = case['bus'][cosim_bus-1][2] / case['bus'][cosim_bus-1][3]
@@ -267,7 +269,8 @@ if __name__ == "__main__":
                 bid['constant_MVAR'] = list(constant_load/MW_MVAR_factor)
                 bid['P_bid'] = P_val_out
                 bid['Q_bid'] = Q_val_out
-                    
+                
+                # print(bid)
                     
                 bid_raw = json.dumps(bid)
                     
@@ -277,6 +280,7 @@ if __name__ == "__main__":
                     pub_object = h.helicsFederateGetPublication(fed, pub_key[0])
                     status = h.helicsPublicationPublishString(pub_object, bid_raw)
                     print('DSO: Published Bids for Bus {}'.format(cosim_bus))
+                    
             if time_granted < 300:
                 tnext_day_ahead_market  = tnext_day_ahead_market + wrapper_config['day_ahead_market']['interval'] - buffer
             else:

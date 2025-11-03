@@ -27,10 +27,10 @@ if User == 2
     libraryName = 'C:\Users\jw.hastings\OneDrive - Washington State University (email.wsu.edu)\Documents\matHELICS\helics.dll';
     headerName = 'C:\Users\jw.hastings\OneDrive - Washington State University (email.wsu.edu)\Documents\matHELICS\helics_minimal.h';
 end
-% libraryName = 'C:\Users\mukh915\matHELICS\helics\helics.dll';
-% headerName = 'C:\Users\mukh915\matHELICS\helics\include\helics_minimal.h';
+% libraryName = 'C:\Users\mukh915\PNNL_Projects\Softwares\helics\helics.dll';
+% headerName = 'C:\Users\mukh915\PNNL_Projects\Softwares\helics\include\helics_minimal.h';
 % helicsStartup(libraryName, headerName)
-% addpath('C:\Users\mukh915\matHELICS\helics\')
+addpath('C:\Users\mukh915\PNNL_Projects\Softwares\helics\')
 if User == 2
     addpath('C:\Users\jw.hastings\OneDrive - Washington State University (email.wsu.edu)\Documents\matHELICS')
 end

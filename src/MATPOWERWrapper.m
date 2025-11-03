@@ -819,13 +819,13 @@ classdef MATPOWERWrapper
            
            for bus_idx= 1 : length(obj.config_data.cosimulation_bus)
                cosim_bus = obj.config_data.cosimulation_bus(bus_idx);
-               temp = strfind(obj.helics_data.pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.rt_energy.cleared'));
+               temp = strfind(obj.helics_data.pub_keys, strcat('.pcc.', mat2str(cosim_bus), '.da_energy.cleared'));
                pubkey_idx = find(~cellfun(@isempty,temp));
                pub_object = helicsFederateGetPublication(obj.helics_data.fed, obj.helics_data.pub_keys{pubkey_idx});
                 
-               raw_allocation = jsonencode (obj.RTM_allocations{cosim_bus});
+               raw_allocation = jsonencode (obj.DAM_allocations{cosim_bus});
                helicsPublicationPublishString(pub_object, raw_allocation);
-               fprintf('Wrapper: Send Cleared Values to Cosim bus %d\n', cosim_bus);
+               fprintf('Wrapper: Send DAM Cleared Values to Cosim bus %d\n', cosim_bus);
             end    
        end
        
@@ -845,7 +845,7 @@ classdef MATPOWERWrapper
                 
                raw_allocation = jsonencode (obj.RTM_allocations{cosim_bus});
                helicsPublicationPublishString(pub_object, raw_allocation);
-               fprintf('Wrapper: Send Cleared Values to Cosim bus %d\n', cosim_bus);
+               fprintf('Wrapper: Send RTM Cleared Values to Cosim bus %d\n', cosim_bus);
             end    
        end
        
