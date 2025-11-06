@@ -16,7 +16,7 @@ flex = 0;
 
 flag_reduce_gen = 0;
 flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
-gen_goal = 400; % How many generators to run with UC (<=422)
+gen_goal = 200; % How many generators to run with UC (<=422)
 % Ex: 0, 20: only the 20 most expensive generators can be decommitted
 % Ex: 1, 30: only the 30 smallest generators can be decommitted
 
@@ -79,6 +79,9 @@ if flag_600_gen == 1
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(4:7, 0.95);       % 2-1
 %     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(5, 0.91);       % 2-7
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(9:11, 0.925);       % 2-5
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits([1,2,6], 0.75);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(9, 0.7);
+    Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(12, 1); 
 else
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(1:8, 0.5);
     Wrapper.MATPOWERModifier = Wrapper.MATPOWERModifier.modify_line_limits(7, 3);
@@ -94,7 +97,7 @@ if flag_18_gen
 end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*2.0/100; 
+zonal_res_req = max_zonal_loads'*7.0/100; 
 if flag_18_gen
     zonal_res_req = max_zonal_loads'*1.0/100;
 end
