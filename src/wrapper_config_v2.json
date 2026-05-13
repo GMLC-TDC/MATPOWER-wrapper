@@ -31,8 +31,8 @@
 		}
  	},
   "results_files": "../results/", 
-  "start_time": "2021-08-05 00:00:00", 
-  "end_time": "2021-08-06 00:00:00", 
+  "start_time": "2021-08-08 00:00:00", 
+  "end_time": "2021-08-10 00:00:00", 
   "include_contingencies": false, 
   "include_renewable_uncertainty": false,
   "include_load_uncertainty": false,
@@ -70,7 +70,7 @@
     "timeDelta": 0,
     "logfile": "output.log",
     "log_level": "warning",
-	"broker_port": "70000",
+	"broker_port": "60000",
     "uninterruptible": true
   }
 }

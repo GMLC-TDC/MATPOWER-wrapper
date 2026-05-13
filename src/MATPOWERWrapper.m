@@ -192,7 +192,13 @@ classdef MATPOWERWrapper
                 obj.DAM_bids{cosim_bus} = DSO_bid;
                 
             end
+       end
 
+       function obj = get_DAM_bids_from_json(obj, time, cosim_bus, json_filename)  
+            %   Get Flex and Inflex loads   %
+            raw_bid_data = read_json(json_filename);
+            obj.DAM_bids{cosim_bus} = raw_bid_data;
+            load_forecast = obj.forecast.('load_profile');
        end
     
        %% Running PF to emulate System States %% 

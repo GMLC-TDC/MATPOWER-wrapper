@@ -38,7 +38,7 @@ if Wrapper.config_data.include_helics
        import helics.*
     end
                
-    Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSOSim'); 
+    Wrapper = Wrapper.prepare_helics_config('helics_config.json', 'DSO_EV_sim'); 
     Wrapper = Wrapper.start_helics_federate('helics_config.json');
 end
 
@@ -177,6 +177,7 @@ while time_granted < Wrapper.duration
                 Wrapper = Wrapper.get_DAM_bids_from_helics();
         else
                 Wrapper = Wrapper.get_DAM_bids_from_wrapper(time_granted, flex_profile_DAM, price_range, bid_blocks);
+                Wrapper = Wrapper.get_DAM_bids_from_json(time_granted, 5, 'sample_EV_DA_bid.json');
         end
 
         %%%%%%%%%%%%%%%%%%%%%%% Adding storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -213,6 +214,10 @@ while time_granted < Wrapper.duration
             ylabel(a,'Bus-Demand (MWH)','FontSize',12);
             xlabel(a,'Time of Day (Hr)','FontSize',12)
             a=1;
+        end
+
+        if Wrapper.config_data.include_helics
+            Wrapper = Wrapper.send_DA_allocations_to_helics();
         end
 
         if tnext_day_ahead_market < 86400
@@ -285,7 +290,7 @@ end
 Wrapper.write_results(case_name)
 
 if Wrapper.config_data.include_helics 
-    helicsFederateDestroy(Wrapper.helics_data.fed)
+    helics.helicsFederateDestroy(Wrapper.helics_data.fed)
     helics.helicsCloseLibrary()
 end
 
