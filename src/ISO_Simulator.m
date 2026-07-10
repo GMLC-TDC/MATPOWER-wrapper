@@ -4,7 +4,7 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 tic();
 % UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
-case_name = 'Test';  %Base, Flex10, Flex20, Mis10, Mis20
+case_name = 'Test_315';  %Base, Flex10, Flex20, Mis10, Mis20
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
@@ -406,8 +406,8 @@ while time_granted < Wrapper.duration
             mpc_mod.gen(Generator_index,8) = 1;   %gen status on
             mpc_mod.gen(Generator_index,10) = -10000; %min generation - Initialize with Large Number
             mpc_mod.gen(Generator_index,19) = 10000;  
-            mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
-            mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
+            % mpc_mod.gencost(Generator_index,1) = 2;   %Polynomial model
+            % mpc_mod.gencost(Generator_index,4) = 3;   %Degree 3 polynomial
             
             %%% Adding the profiles for Dispatchable Load %%%
             
@@ -420,12 +420,40 @@ while time_granted < Wrapper.duration
             DSO_RES_MW_profile = create_dam_profile(DSO_DAM_RES_MAX, Generator_index, 1, CT_TGEN, PMIN);
             profiles = getprofiles(DSO_RES_MW_profile, profiles);
             
-            DSO_RES_C0_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,1), Generator_index, 1, CT_TGENCOST, 5);
-            DSO_RES_C1_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,2), Generator_index, 1, CT_TGENCOST, 6);
-            DSO_RES_C2_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,3), Generator_index, 1, CT_TGENCOST, 7);
-            profiles = getprofiles(DSO_RES_C0_profile, profiles);
-            profiles = getprofiles(DSO_RES_C1_profile, profiles);
-            profiles = getprofiles(DSO_RES_C2_profile, profiles);
+            
+            if strfind(Wrapper.config_data.day_ahead_market.bid_model,"poly")
+                mpc_mod.gencost(Generator_index,1) = 2;                  %Polynomial model
+                mpc_mod.gencost(Generator_index,4) = 3;         
+                DSO_RES_C0_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,1), Generator_index, 1, CT_TGENCOST, 5);
+                DSO_RES_C1_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,2), Generator_index, 1, CT_TGENCOST, 6);
+                DSO_RES_C2_profile = create_dam_profile(DSO_DAM_Bid_Coeff(:,3), Generator_index, 1, CT_TGENCOST, 7);
+                profiles = getprofiles(DSO_RES_C0_profile, profiles);
+                profiles = getprofiles(DSO_RES_C1_profile, profiles);
+                profiles = getprofiles(DSO_RES_C2_profile, profiles);
+            else
+                 mpc_mod.gencost(Generator_index,1) = 1;                              %Block model
+                 mpc_mod.gencost(Generator_index,4) = length(DSO_DAM_bid.Q_bid(1,:));          %# of blocks
+                 for t = 1:24
+                   [Q_reverse(t,:), idx] = sort(-1*DSO_DAM_bid.Q_bid(t,:));
+                   Actual_cost = zeros(24, length(DSO_DAM_bid.Q_bid(t,:)));
+                   for k = 1:size(DSO_DAM_bid.Q_bid, 2)
+                       if k == 1
+                           Actual_cost(t, k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
+                       else
+                           Actual_cost(t, k) = Actual_cost(k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
+                       end
+                   end
+                   Cost_reverse(t,:) = -1*Actual_cost(t,idx);
+                 end
+                 for a = 1:length(DSO_DAM_bid.Q_bid(1,:))
+                     mpc_mod.gencost(Generator_index,3+(2*a)) = Q_reverse(a);
+                     mpc_mod.gencost(Generator_index,4+(2*a)) = Cost_reverse(a);
+                     DSO_RES_Q_profile = create_dam_profile(Q_reverse(:,a), Generator_index, 1, CT_TGENCOST, 3+(2*a));
+                     DSO_RES_C_profile = create_dam_profile(Cost_reverse(:,a), Generator_index, 1, CT_TGENCOST, 4+(2*a));
+                     profiles = getprofiles(DSO_RES_Q_profile, profiles);
+                     profiles = getprofiles(DSO_RES_C_profile, profiles);
+                 end
+            end
             
         end
 
@@ -564,8 +592,10 @@ while time_granted < Wrapper.duration
 
 			   Bus_number = Wrapper.config_data.day_ahead_market.cosimulation_bus(length(Wrapper.config_data.day_ahead_market.cosimulation_bus)-i+1,1);
                Generator_index = size(mpc_mod.gen,1);
+               % Wrapper.DAM_allocations{Bus_number}.P_clear =  ms.lamP(Bus_number,:); 
+               % Wrapper.DAM_allocations{Bus_number}.Q_clear =  ms.Pg(Bus_number,:);
                Wrapper.DAM_allocations{Bus_number}.P_clear =  ms.lamP(Bus_number,:); 
-               Wrapper.DAM_allocations{Bus_number}.Q_clear =  ms.Pg(Bus_number,:);
+               Wrapper.DAM_allocations{Bus_number}.Q_clear =  ms.Pg(Generator_index,:);
 
                mpc_mod.genfuel(Generator_index,:) = [];
                mpc_mod.gen(Generator_index,:) = [];
