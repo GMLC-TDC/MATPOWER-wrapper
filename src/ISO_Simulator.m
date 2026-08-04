@@ -440,7 +440,7 @@ while time_granted < Wrapper.duration
                        if k == 1
                            Actual_cost(t, k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
                        else
-                           Actual_cost(t, k) = Actual_cost(k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
+                           Actual_cost(t, k) = Actual_cost(k-1) +M   (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
                        end
                    end
                    Cost_reverse(t,:) = -1*Actual_cost(t,idx);

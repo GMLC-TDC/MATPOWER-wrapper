@@ -583,7 +583,7 @@ classdef MATPOWERWrapper
             Bus_number = obj.config_data.day_ahead_market.cosimulation_bus(length(obj.config_data.day_ahead_market.cosimulation_bus)-i+1,1);
             Generator_index = size(mpc_mod.gen,1);
             obj.DAM_allocations{Bus_number}.P_clear =  obj.DAM_summary .lamP(Bus_number,:); 
-            obj.DAM_allocations{Bus_number}.Q_clear =  obj.DAM_summary .Pg(Bus_number,:);
+            obj.DAM_allocations{Bus_number}.Q_clear =  obj.DAM_summary .Pg(Generator_index,:);
             mpc_mod.genfuel(Generator_index,:) = [];
             mpc_mod.gen(Generator_index,:) = [];
             mpc_mod.gencost(Generator_index,:) = [];

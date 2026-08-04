@@ -61,7 +61,8 @@
     "interval": 86400,
     "cosimulation_bus": [5],
     "forecast_error": 10,
-    "transactive": true
+    "transactive": true,
+	"bid_model": "poly"
   },
   "helics_config": {
     "coreType": "zmq",
