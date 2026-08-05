@@ -62,7 +62,7 @@
     "cosimulation_bus": [5],
     "forecast_error": 10,
     "transactive": true,
-	"bid_model": "poly"
+	"bid_model": "block"
   },
   "helics_config": {
     "coreType": "zmq",

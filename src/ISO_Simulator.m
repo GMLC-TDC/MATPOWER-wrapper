@@ -10,11 +10,11 @@ stor = struct();
 stor.state = 0;
 flag_600_gen = 1;
 flag_18_gen = 0;
-flag_uc = 0;
+flag_uc = 1;
 Mismatch = 0;
 flex = 0;
 
-flag_reduce_gen = 0;
+flag_reduce_gen = 1;
 flag_reduce_option = 1; % 0 reduces by cost, 1 reduces by capacity
 gen_goal = 200; % How many generators to run with UC (<=422)
 % Ex: 0, 20: only the 20 most expensive generators can be decommitted
@@ -378,19 +378,34 @@ while time_granted < Wrapper.duration
             bus_number = Wrapper.config_data.day_ahead_market.cosimulation_bus(i,1);
             DSO_DAM_bid = Wrapper.DAM_bids{bus_number}; 
             
-            DSO_DAM_Bid_Coeff = zeros(24,3);
-            for t = 1:24
-                Actual_cost = zeros(length(DSO_DAM_bid.Q_bid(t,:)),1);
-                for k = 1:size(DSO_DAM_bid.Q_bid, 2)
-                   if k == 1
-                       Actual_cost(k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
-                   else
-                       Actual_cost(k) = Actual_cost(k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
-                   end
-                end 
-                DSO_DAM_Bid_Coeff(t,1:3) = polyfit(-1*transpose(DSO_DAM_bid.Q_bid(t,:)), -1*Actual_cost, 2);
-                DSO_DAM_RES_MAX= -1*max(DSO_DAM_bid.Q_bid, [], 2);
+            %%% adding small increment to enforce strict increasing quantity
+            delta = 1e-3;               
+            [nRows, nCols] = size(DSO_DAM_bid.Q_bid);
+            Q_bid_adj = DSO_DAM_bid.Q_bid;
+            for i = 1:nRows
+                for j = 2:nCols
+                    if Q_bid_adj(i,j) <= Q_bid_adj(i,j-1)
+                        Q_bid_adj(i,j) = Q_bid_adj(i,j-1) + delta;
+                    end
+                end
             end
+            DSO_DAM_bid.Q_bid = Q_bid_adj; 
+            %%%
+
+            DSO_DAM_Bid_Coeff = zeros(24,3);
+            Actual_cost = zeros(24, length(DSO_DAM_bid.Q_bid(1,:)));
+            for t = 1:24
+                for k = 1:size(DSO_DAM_bid.Q_bid, 2)
+                       if k == 1
+                           Actual_cost(t, k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
+                       else
+                           Actual_cost(t, k) = Actual_cost(t, k-1) + (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
+                       end
+                end
+                DSO_DAM_Bid_Coeff(t,1:3) = polyfit(-1*transpose(DSO_DAM_bid.Q_bid(t,:)), -1*Actual_cost(t,:), 2);
+            end
+            DSO_DAM_RES_MAX= -1*max(DSO_DAM_bid.Q_bid, [], 2);
+            DSO_DAM_RES_MIN= -1*min(DSO_DAM_bid.Q_bid, [], 2);
             % DAM_Bid_Coeff{bus_number} = DSO_DAM_bid_Coeff;
             % DAM_RES_MAX{bus_number} = DSO_DAM_RES_MAX;
            
@@ -417,9 +432,12 @@ while time_granted < Wrapper.duration
             DSO_DAM_UNRES_MVAR_profile = create_dam_profile(DSO_DAM_bid.constant_MVAR, bus_number, 1, CT_TBUS, QD);
             profiles = getprofiles(DSO_DAM_UNRES_MVAR_profile, profiles);
            
-            DSO_RES_MW_profile = create_dam_profile(DSO_DAM_RES_MAX, Generator_index, 1, CT_TGEN, PMIN);
-            profiles = getprofiles(DSO_RES_MW_profile, profiles);
+            DSO_RES_MW_profile_MIN = create_dam_profile(DSO_DAM_RES_MAX, Generator_index, 1, CT_TGEN, PMIN);
+            profiles = getprofiles(DSO_RES_MW_profile_MIN, profiles);
             
+            DSO_RES_MW_profile_MAX = create_dam_profile(DSO_DAM_RES_MIN, Generator_index, 1, CT_TGEN, PMAX);
+            profiles = getprofiles(DSO_RES_MW_profile_MAX, profiles);
+
             
             if strfind(Wrapper.config_data.day_ahead_market.bid_model,"poly")
                 mpc_mod.gencost(Generator_index,1) = 2;                  %Polynomial model
@@ -435,23 +453,18 @@ while time_granted < Wrapper.duration
                  mpc_mod.gencost(Generator_index,4) = length(DSO_DAM_bid.Q_bid(1,:));          %# of blocks
                  for t = 1:24
                    [Q_reverse(t,:), idx] = sort(-1*DSO_DAM_bid.Q_bid(t,:));
-                   Actual_cost = zeros(24, length(DSO_DAM_bid.Q_bid(t,:)));
-                   for k = 1:size(DSO_DAM_bid.Q_bid, 2)
-                       if k == 1
-                           Actual_cost(t, k) = 0 + (DSO_DAM_bid.Q_bid(t,k) - 0)*DSO_DAM_bid.P_bid(t,k) ;
-                       else
-                           Actual_cost(t, k) = Actual_cost(k-1) +M   (DSO_DAM_bid.Q_bid(t,k) - DSO_DAM_bid.Q_bid(t,k-1))*DSO_DAM_bid.P_bid(t,k) ;
-                       end
-                   end
                    Cost_reverse(t,:) = -1*Actual_cost(t,idx);
                  end
+                 mpc_mod.gencost(Generator_index,1) = 1; %piecewise linear model
+                 mpc_mod.gencost(Generator_index,4) = length(DSO_DAM_bid.Q_bid(1,:));
                  for a = 1:length(DSO_DAM_bid.Q_bid(1,:))
-                     mpc_mod.gencost(Generator_index,3+(2*a)) = Q_reverse(a);
-                     mpc_mod.gencost(Generator_index,4+(2*a)) = Cost_reverse(a);
                      DSO_RES_Q_profile = create_dam_profile(Q_reverse(:,a), Generator_index, 1, CT_TGENCOST, 3+(2*a));
                      DSO_RES_C_profile = create_dam_profile(Cost_reverse(:,a), Generator_index, 1, CT_TGENCOST, 4+(2*a));
                      profiles = getprofiles(DSO_RES_Q_profile, profiles);
                      profiles = getprofiles(DSO_RES_C_profile, profiles);
+                     mpc_mod.gencost(Generator_index,3+(2*a)) = Q_reverse(1,a);
+                     mpc_mod.gencost(Generator_index,4+(2*a)) = Cost_reverse(1,a);
+
                  end
             end
             
