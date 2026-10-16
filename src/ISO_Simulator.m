@@ -4,7 +4,7 @@ clear classes
 warning('off','MATLAB:polyfit:RepeatedPointsOrRescale');
 tic();
 % UCBase, UCStor, UCFlex10, UCFlex20, UCMis10, UCMis20
-case_name = 'Test_315';  %Base, Flex10, Flex20, Mis10, Mis20
+case_name = 'BASE';  %'BASE' 'TOU' 'P2D' 'P2D1' 'DAM' 'DAM_DSO'
 DAM_plot_option = 0;
 stor = struct();
 stor.state = 0;
@@ -64,7 +64,8 @@ define_constants;
 tnext_physics_powerflow = Wrapper.config_data.physics_powerflow.interval;
 tnext_real_time_market = Wrapper.config_data.real_time_market.interval;
 % tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
-tnext_day_ahead_market = 2;
+DAM_offset = 2;
+tnext_day_ahead_market = DAM_offset;
 
 time_granted = 0;
 next_helics_time =  min([tnext_physics_powerflow, tnext_real_time_market, tnext_day_ahead_market]);
@@ -97,7 +98,9 @@ if flag_18_gen
 end
 % max_zonal_loads =  [71590]; % Test Case Based on 2016 data
 % Assuming reserve requirement to be 2 % of peak load
-zonal_res_req = max_zonal_loads'*7.0/100; 
+zonal_res_req = max_zonal_loads'*7/100; 
+% Increasing specific zonal reserve requirements
+% zonal_res_req(3) = zonal_res_req(3) * 1.1;
 if flag_18_gen
     zonal_res_req = max_zonal_loads'*1.0/100;
 end
@@ -266,9 +269,10 @@ while time_granted < Wrapper.duration
     if (time_granted >= tnext_day_ahead_market) && (Wrapper.config_data.include_day_ahead_market) && (time_granted < Wrapper.duration)
 %         fprintf('Wrapper: Current Time %s\n', (datetime(736543,'ConvertFrom','datenum') + seconds(time_granted)))
 %         fprintf('Wrapper: DA forecast at Time %s\n', (datetime(Wrapper.config_data.start_time) + seconds(time_granted)))
-        if time_granted < 86400
-            time_granted = 0;
-        end
+        % if time_granted < 86400
+        %     time_granted = 0;
+        % end
+        time_granted = time_granted - DAM_offset;
         fprintf('Wrapper: DA forecast at Time %s\n', datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400)))
         Wrapper = Wrapper.get_DA_forecast('wind_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
         Wrapper = Wrapper.get_DA_forecast('load_profile', time_granted, Wrapper.config_data.day_ahead_market.interval);
@@ -379,7 +383,7 @@ while time_granted < Wrapper.duration
             DSO_DAM_bid = Wrapper.DAM_bids{bus_number}; 
             
             %%% adding small increment to enforce strict increasing quantity
-            delta = 1e-3;               
+            delta = 1e-5;               
             [nRows, nCols] = size(DSO_DAM_bid.Q_bid);
             Q_bid_adj = DSO_DAM_bid.Q_bid;
             for i = 1:nRows
@@ -642,11 +646,12 @@ while time_granted < Wrapper.duration
         end
 
 
-        if tnext_day_ahead_market < 86400
-            tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
-        else
-            tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
-        end
+        % if tnext_day_ahead_market < 86400
+        %     tnext_day_ahead_market = Wrapper.config_data.day_ahead_market.interval;
+        % else
+        %     tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
+        % end
+        tnext_day_ahead_market = tnext_day_ahead_market + Wrapper.config_data.day_ahead_market.interval;
         fprintf('Wrapper: NEXT DAM at Time %s\n', (tnext_day_ahead_market))
 
         
@@ -710,14 +715,14 @@ while time_granted < Wrapper.duration
                 Wrapper = Wrapper.get_RTM_bids_from_wrapper(time_granted, flex_profile(hod), price_range, bid_blocks);
             end
             if Wrapper.config_data.include_day_ahead_market
-                hour_idx = floor((time_granted)/3600) + 1;
+                hour_idx = floor((time_granted-DAM_offset)/3600) + 1;
                 Wrapper.mpc.gen(:,8) = transpose(Wrapper.results.DAM.UC(hour_idx,2:(size(Wrapper.mpc.gen,1)+1)));
                 % Wrapper.mpc.gen(:,8) = ones(size(Wrapper.mpc.gen,1),1);
             end
             
             fprintf('Wrapper: Running RT Market at Time %s\n', (datestr(datenum(Wrapper.config_data.start_time) + (time_granted/86400))))
             %***********************************************************%
-            Wrapper = Wrapper.run_RT_market(time_granted);
+            Wrapper = Wrapper.run_RT_market(time_granted, DAM_offset);
             %***********************************************************%
             
             %***********************************************************%

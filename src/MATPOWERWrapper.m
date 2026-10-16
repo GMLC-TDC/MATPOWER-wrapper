@@ -220,7 +220,7 @@ classdef MATPOWERWrapper
        end
        
        %% Running OPF to emulate Real Time Market %% 
-       function obj = run_RT_market(obj, time)
+       function obj = run_RT_market(obj, time, DAM_offset)
            
            mpc_mod = struct();
            mpc_mod.bus = obj.mpc.bus;
@@ -231,7 +231,7 @@ classdef MATPOWERWrapper
 %            mpc_mod.genfuel = obj.mpc.genfuel;
            org_gen_idx = height(mpc_mod.gen);
           
-           hour_idx = floor((time)/3600) + 1;
+           hour_idx = floor((time-DAM_offset)/3600) + 1;
            %************ Adjusting generator capacity based on ramp limits *************%
            if time > obj.config_data.real_time_market.interval
                commitment = transpose(obj.results.DAM.PG(hour_idx,2:(size(obj.mpc.gen,1)+1)));
