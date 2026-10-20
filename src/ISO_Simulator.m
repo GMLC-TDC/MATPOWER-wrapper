@@ -455,6 +455,8 @@ while time_granted < Wrapper.duration
             else
                  mpc_mod.gencost(Generator_index,1) = 1;                              %Block model
                  mpc_mod.gencost(Generator_index,4) = length(DSO_DAM_bid.Q_bid(1,:));          %# of blocks
+                 Q_reverse = zeros(24, length(DSO_DAM_bid.Q_bid(1,:)));
+                 Cost_reverse = zeros(24, length(DSO_DAM_bid.Q_bid(1,:)));
                  for t = 1:24
                    [Q_reverse(t,:), idx] = sort(-1*DSO_DAM_bid.Q_bid(t,:));
                    Cost_reverse(t,:) = -1*Actual_cost(t,idx);
