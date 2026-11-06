@@ -4,6 +4,7 @@ close all
 
 
 Cases = {'BASE','TOU','P2D','DAM','DAM_DSO'};
+cases_subset_idx = [1,5];
 
 fid = fopen('../src/wrapper_config_v2.json'); 
 raw = fread(fid,inf); 
@@ -63,14 +64,14 @@ time_hourly = datetime(time_hourly, 'ConvertFrom', 'epochtime', 'Epoch', '2021-0
 time_DAM = case_data_LMP_DAM_raw(1,:,1);
 time_DAM = datetime((time_DAM/86400)+start_time);
 
-% Add in load from negative generator
+% Add in load from negative generator (EVs)
 for run=1:6
     % case_data_PD(run,:,6) = case_data_PD(run,:,6) - case_data_PG(run,:,end);
     case_data_PD_DAM_raw(run,:,6) = case_data_PD_DAM_raw(run,:,6) - case_data_PG_DAM_raw(run,:,end);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%% LMPs %%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%% RT LMPs %%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 for run = 1:5
     figure()
@@ -83,7 +84,28 @@ for run = 1:5
     
     legend({'1','2','3','4','5','6','7','8'},"Location","northwest")
     
-    ylabel("LMP")
+    ylabel("RT LMP")
+    xlabel("Time")
+    title(char(Cases(run)))
+    
+    hold off
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%% DA LMPs %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+for run = cases_subset_idx
+    figure()
+    
+    for bus=2:9
+        plot(time_hourly(25:end),case_data_LMP_DAM_raw(run,25:end,bus))
+        hold on
+    end
+    grid on
+    
+    legend({'1','2','3','4','5','6','7','8'},"Location","northwest")
+    
+    ylabel("DA LMP")
     xlabel("Time")
     title(char(Cases(run)))
     
@@ -162,6 +184,84 @@ for run=1:5
     hold off
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%% DA LMPs %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% figure()
+% for run = cases_subset_idx
+% 
+% end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%% Cumulative Costs %%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+for run = 1:6
+    incremental_cost(run,:,:) = case_data_LMP_DAM_raw(run,:,2:9).* case_data_PD_DAM_raw(run,:,2:9);
+end
+
+figure()
+bus_idx = 5;
+for run=cases_subset_idx
+    plot(time_hourly(25:end),incremental_cost(run,25:end,bus_idx))
+    hold on
+end
+grid on
+legend(Cases(cases_subset_idx))
+title("Bus 5 Incremental Costs")
+xlabel("Time")
+ylabel("Cost/hour ($)")
+hold off
+
+combined_costs = zeros(size(incremental_cost,1),size(incremental_cost,2));
+for bus_idx=1:8
+    if bus_idx ~= 5
+        combined_costs = combined_costs + incremental_cost(:,:,bus_idx);
+    end
+end
+figure()
+for run=cases_subset_idx
+    plot(time_hourly(25:end),combined_costs(run,25:end))
+    hold on
+end
+grid on
+legend(Cases(cases_subset_idx))
+title("System Without Bus 5 Incremental Costs")
+xlabel("Time")
+ylabel("Cost/hour ($)")
+hold off
+
+figure()
+plot(time_hourly(25:end),combined_costs(5,25:end)-combined_costs(1,25:end))
+hold on
+plot(time_hourly(25:end),incremental_cost(5,25:end,5)-incremental_cost(1,25:end,5))
+grid on
+title("Incremental Costs DAM-BASE")
+legend({"System without bus 5","Bus 5"})
+xlabel("Time")
+ylabel("Cost/hour ($)")
+hold off
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%% LMP Shift %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+for run=1:6
+    LMP_shift(run,:,1) = case_data_LMP_DAM_raw(run,25:end,1);
+    LMP_shift(run,:,2) = case_data_LMP_DAM_raw(run,25:end,6) - case_data_LMP_DAM_raw(run,1:(end-24),6);
+end
+
+figure()
+for run = cases_subset_idx
+    plot(time_hourly(25:end),LMP_shift(run,:,2))
+    hold on
+end
+grid on
+legend(Cases(cases_subset_idx))
+title("LMP Shift Bus 5")
+xlabel("Time")
+ylabel("LMP Difference (current-previous)")
+hold off
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%% Compute Metrics %%%%%%%%%%%%%%%%%%%%%
@@ -171,7 +271,13 @@ Cases = {'BASE','TOU','P2D','DAM','DAM_DSO','P2D1'};
 
 for run = 1:6
     for bus_idx = 2:9
-        DA_cost(:, bus_idx) = case_data_LMP_DAM_raw(run,25:end,bus_idx).* case_data_PD_DAM_raw(run,25:end,bus_idx);
+        if bus_idx == 6
+            EV_load = -1*case_data_PG_DAM_raw(run,:,end);
+            % DA_cost(:, bus_idx) = (case_data_LMP_DAM_raw(run,25:end,bus_idx)).* (case_data_PD_DAM_raw(run,25:end,bus_idx)+EV_load(25:end));
+            DA_cost(:, bus_idx) = case_data_LMP_DAM_raw(run,25:end,bus_idx).* case_data_PD_DAM_raw(run,25:end,bus_idx);
+        else
+            DA_cost(:, bus_idx) = case_data_LMP_DAM_raw(run,25:end,bus_idx).* case_data_PD_DAM_raw(run,25:end,bus_idx);
+        end
     end
 
 
@@ -209,3 +315,5 @@ for run = 1:6
     fprintf('Total Cost of EV Charging is %f$, \n',total_EV_cost);
 
 end
+
+

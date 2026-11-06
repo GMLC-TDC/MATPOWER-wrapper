@@ -25,7 +25,7 @@ EV_list = {'R4_12_47_1_meter_2_ev', 'R4_12_47_1_meter_4_ev', 'R4_12_47_1_meter_5
 
 GLD_file = "C:/Users/jacob/Documents/MatpowerWrapper/EVtest/EV_model/distribution_simulation/EV_charger_outputR4_12_47_1.csv";
 % GLD_EV_data_raw = readmatrix(GLD_file, 'NumHeaderLines', 8);
-GLD_EV_data_raw = readtable(GLD_file, 'NumHeaderLines', 8);
+GLD_EV_data_raw = readtable(GLD_file, 'NumHeaderLines', 9);
 GLD_EV_data_select = removevars(GLD_EV_data_raw, EV_list);
 
 TT = table2timetable(GLD_EV_data_select, 'RowTimes', 'x_Timestamp');
@@ -36,17 +36,18 @@ GLD_EV_data_select_hourly = timetable2table(TT_hourly);
 
 vars = setdiff(GLD_EV_data_select_hourly.Properties.VariableNames, {'x_Timestamp'}, 'stable');
 GLD_EV_data = 1000*sum(GLD_EV_data_select_hourly{120:264, vars}, 2);
-% GLD_EV_data_alt = 1000*sum(GLD_EV_data_select(1:1729,2:end),2);
-% GLD_time = 0:300:518400;
-% GLD_time = datetime((GLD_time/86400)+start_time);
+GLD_EV_data_alt = 1000*table2array(sum(GLD_EV_data_select(1:1729,2:end),2));
+GLD_time = 0:300:518400;
+GLD_time = datetime((GLD_time/86400)+start_time);
 
 plot(time,case_data_EV(:,4))
 hold on
-% plot(time,case_data_EVU(:,4))
+plot(time,case_data_EVU(:,4))
 plot(GLD_EV_data_select_hourly.x_Timestamp(120:264),GLD_EV_data)
 grid on
 ylabel("EV Load (W)")
 xlabel("Time")
-legend(["Sim, unoptimized","GLD"])
+xlim([datetime(2021, 8, 7), datetime(2021, 8, 12)])
+legend(["Sim, optimized","Sim, unoptimized","GLD"])
 hold off
 
